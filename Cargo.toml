@@ -1,0 +1,12 @@
+[package]
+name = "RustBot"
+version = "0.1.0"
+edition = "2021"
+author = ['Clarence']
+
+[dependencies]
+futures-util = "0.3"
+tokio-tungstenite = { version = "0.18", features = ["connect", "native-tls"] }
+url = "2.3"
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
