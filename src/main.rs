@@ -1,5 +1,5 @@
 mod connector;
-
+pub mod util;
 use connector::OkxWebSocketConnector;
 
 #[tokio::main]
