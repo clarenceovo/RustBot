@@ -7,19 +7,16 @@ use tokio_tungstenite::tungstenite;
 use url::Url;
 use serde_json::Value;
 use crate::util::time_util::Utils;
-use std::sync::mpsc::Sender;
-//use crate::model::message::Message as BoltMessage;
 
-const OKX_WS_URL: &str = "wss://ws.okx.com:8443/ws/v5/public";
+const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
 
-pub struct OkxMarketDataWebSocketConnector;
+pub struct BinanceFuturesWebSocketConnector;
 
 #[derive(Debug)]
 pub enum WebSocketError {
     Timeout,
     WebSocketError(tokio_tungstenite::tungstenite::Error),
     JsonError(serde_json::Error),
-    SendError(String),
     UrlParseError(url::ParseError),
 }
 
@@ -31,7 +28,6 @@ impl std::fmt::Display for WebSocketError {
             WebSocketError::Timeout => write!(f, "No message received for 10 seconds"),
             WebSocketError::WebSocketError(e) => write!(f, "WebSocket error: {}", e),
             WebSocketError::JsonError(e) => write!(f, "JSON parsing error: {}", e),
-            WebSocketError::SendError(e) => write!(f, "Send error: {}", e),
             WebSocketError::UrlParseError(e) => write!(f, "URL parse error: {}", e),
         }
     }
@@ -55,27 +51,26 @@ impl From<url::ParseError> for WebSocketError {
     }
 }
 
-impl OkxMarketDataWebSocketConnector {
+impl BinanceFuturesWebSocketConnector {
     pub fn new() -> Self {
-        OkxMarketDataWebSocketConnector
+        BinanceFuturesWebSocketConnector
     }
 
-    pub async fn connect_and_subscribe(&self, instrument_id: &Vec<String>) -> Result<(), WebSocketError> {
-        let url = Url::parse(OKX_WS_URL)?;
+    pub async fn connect_and_subscribe(&self, symbols: &Vec<String>) -> Result<(), WebSocketError> {
+        let url = Url::parse(BINANCE_FUTURES_WS_URL)?;
         let (ws_stream, _) = connect_async(url).await?;
         let (mut write, mut read) = ws_stream.split();
 
-        // Subscribe to ticker channel
-        for ticker in instrument_id {
-            let subscribe_message = json!({
-                "op": "subscribe",
-                "args": [{
-                    "channel": "tickers",
-                    "instId": ticker
-                }]
-            });
-            write.send(Message::Text(subscribe_message.to_string())).await?;
-        }
+        // Create subscription message
+        let streams: Vec<String> = symbols.iter().map(|symbol| format!("{}@bookTicker", symbol.to_lowercase())).collect();
+        let subscribe_message = json!({
+            "method": "SUBSCRIBE",
+            "params": streams,
+            "id": 1
+        });
+
+        // Send subscription message
+        write.send(Message::Text(subscribe_message.to_string())).await?;
 
         let timeout_duration = Duration::from_secs(10);
         loop {
@@ -84,13 +79,13 @@ impl OkxMarketDataWebSocketConnector {
                     match message? {
                         Message::Text(text) => {
                             let json_data: Value = serde_json::from_str(&text)?;
-                            if let Some(ts_difference) = Self::get_ts_difference(&json_data) {
+                            if let Some(event_time) = Self::get_event_time(&json_data) {
                                 let server_ts = Utils::get_current_timestamp_ms() as i64;
-                                let latency = server_ts - ts_difference;
-                                println!("Latency: {} ms", latency); //check the latency of the websocket connection
-
-                                //let bolt_message = BoltMessage::new(json_data, latency);
-                                //sender.send(bolt_message).map_err(|e| WebSocketError::SendError(e.to_string()))?;
+                                let latency = server_ts - event_time;
+                                //println!("Symbol: {}, Latency: {} ms", json_data["s"].as_str().unwrap_or("Unknown"), latency);
+                                
+                                // Here you can process the ticker data as needed
+                                println!("Received ticker: {:?}", json_data);
                             }
                         },
                         Message::Binary(binary) => {
@@ -117,7 +112,7 @@ impl OkxMarketDataWebSocketConnector {
                     break;
                 },
                 Err(_) => {
-                    print!("OKX websocket error");
+                    print!("Binance websocket error");
                     return Err(WebSocketError::Timeout);
                 }
             }
@@ -125,17 +120,8 @@ impl OkxMarketDataWebSocketConnector {
 
         Ok(())
     }
-    fn get_ts_difference(json_data: &Value) -> Option<i64> {
-        let data = json_data["data"].as_array()?;
-        if data.is_empty() {
-            return None;
-        }
 
-        // We only need the first (and likely only) item in the data array
-        let item = data.first()?;
-
-        // Extract the 'ts' field as a string and parse it
-        let ts_str = item["ts"].as_str()?;
-        ts_str.parse::<i64>().ok()
+    fn get_event_time(json_data: &Value) -> Option<i64> {
+        json_data["E"].as_i64()
     }
 }
