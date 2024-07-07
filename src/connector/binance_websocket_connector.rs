@@ -6,6 +6,7 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tokio_tungstenite::tungstenite;
 use url::Url;
 use serde_json::Value;
+use crate::model::orderbook::OrderBookLevel;
 use crate::util::time_util::Utils;
 
 const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
@@ -85,7 +86,26 @@ impl BinanceFuturesWebSocketConnector {
                                 //println!("Symbol: {}, Latency: {} ms", json_data["s"].as_str().unwrap_or("Unknown"), latency);
                                 
                                 // Here you can process the ticker data as needed
-                                println!("Received ticker: {:?}", json_data);
+                                //println!("Received ticker: {:?}", json_data);
+                                let bidOrder = match (json_data["b"].as_str(), json_data["B"].as_str()) {
+                                    (Some(price_str), Some(amount_str)) => {
+                                        let price = price_str.parse::<f64>().expect("Failed to parse bid price");
+                                        let amount = amount_str.parse::<f64>().expect("Failed to parse bid amount");
+                                        OrderBookLevel::new(price, amount)
+                                    },
+                                    _ => panic!("Invalid bid data"),
+                                };
+                                
+                                let askOrder = match (json_data["a"].as_str(), json_data["A"].as_str()) {
+                                    (Some(price_str), Some(amount_str)) => {
+                                        let price = price_str.parse::<f64>().expect("Failed to parse ask price");
+                                        let amount = amount_str.parse::<f64>().expect("Failed to parse ask amount");
+                                        OrderBookLevel::new(price, amount)
+                                    },
+                                    _ => panic!("Invalid ask data"),
+                                };
+                                println!("Symbol: {}, Bid: {}, Ask: {}", json_data["s"].as_str().unwrap_or("Unknown"), bidOrder.price, askOrder.price);
+                                
                             }
                         },
                         Message::Binary(binary) => {

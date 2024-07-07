@@ -29,7 +29,7 @@ enum PosSide {
     Net,
 }
 
-struct ExchangeOrder {
+struct OkxOrder {
     ref_id: Uuid,
     exchange_name: String,
     order_id: String,
@@ -52,7 +52,7 @@ struct ExchangeOrder {
     order_type: OrderType,
 }
 
-impl ExchangeOrder {
+impl OkxOrder {
     fn new(
         exchange_name: &str,
         strategy: &str,
@@ -64,7 +64,7 @@ impl ExchangeOrder {
         order_type: OrderType,
         reduce_only: bool,
     ) -> Self {
-        let ref_id = Uuid::new_v4();
+        let ref_id = uuid::Uuid::new_v4();
         let created_ts = Utc::now();
         let pos_side = match side {
             OrderSide::Buy => PosSide::Net,
@@ -112,7 +112,7 @@ impl ExchangeOrder {
     fn update_order_price(&mut self, price: f64) {
         self.price = price;
         self.print(format!(
-            "Order Updated, ID:{} | PRICE :{} | SIZE :{} | SIDE:{} |@ {}",
+            "Order Updated, ID:{} | PRICE :{} | SIZE :{} | SIDE:{:?} |@ {}",
             self.ref_id,
             self.price,
             self.size,
@@ -125,7 +125,7 @@ impl ExchangeOrder {
         self.price = price;
         self.size = size;
         self.print(format!(
-            "Order Updated, ID:{} | PRICE :{} | SIZE :{} | SIDE:{} |@ {}",
+            "Order Updated, ID:{} | PRICE :{} | SIZE :{} | SIDE:{:?} |@ {}",
             self.ref_id,
             self.price,
             self.size,
@@ -143,12 +143,29 @@ impl ExchangeOrder {
         self.updated_ts = Some(Utc::now());
         self.fill_size = fill_size;
         self.fill_price = fill_price;
-        self.print(format!(
-            "Order Updated, ID:{} | PRICE :{} | SIZE :{} | FILLED:{} |@ {}",
+    }
+
+    fn to_string(&self) -> String {
+        format!(
+            "OkxOrder {{ ref_id: {}, exchange: {}, order_id: {}, state: {:?}, price: {:.2}, size: {:.8}, side: {:?}, instrument: {}, is_live: {}, created: {}, fill_size: {:.8}, fill_price: {:.2}, is_filled: {}, order_type: {:?} }}",
             self.ref_id,
+            self.exchange_name,
+            self.order_id,
+            self.order_state,
             self.price,
             self.size,
-            self.fill_size)
-        );
+            self.side,
+            self.instrument,
+            self.is_live,
+            self.created_ts,
+            self.fill_size,
+            self.fill_price,
+            self.is_filled,
+            self.order_type
+        )
+    }
+
+    fn print(&self, message: String) {
+        println!("{}: {}", message, self.to_string());
     }
 }

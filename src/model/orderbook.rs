@@ -6,12 +6,21 @@ use std::str::FromStr;
 pub struct OrderBookLevel {
     pub price: f64,
     pub quantity: f64,
-    pub order_count: i32,
     pub price_string: String,
     pub quantity_string: String,
-    pub order_count_string: String,
 }
+impl OrderBookLevel {
+    pub fn new(price: f64, quantity: f64) -> Self {
+        OrderBookLevel {
+            price,
+            quantity,
+            price_string: format!("{:.8}", price),
+            quantity_string: format!("{:.8}", quantity),
 
+        }
+    }
+    
+}
 impl PartialEq for OrderBookLevel {
     fn eq(&self, other: &Self) -> bool {
         self.price == other.price

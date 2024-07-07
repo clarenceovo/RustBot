@@ -6,6 +6,7 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tokio_tungstenite::tungstenite;
 use url::Url;
 use serde_json::Value;
+use crate::model::orderbook::OrderBookLevel;
 use crate::util::time_util::Utils;
 use std::sync::mpsc::Sender;
 //use crate::model::message::Message as BoltMessage;
@@ -87,10 +88,28 @@ impl OkxMarketDataWebSocketConnector {
                             if let Some(ts_difference) = Self::get_ts_difference(&json_data) {
                                 let server_ts = Utils::get_current_timestamp_ms() as i64;
                                 let latency = server_ts - ts_difference;
-                                println!("Latency: {} ms", latency); //check the latency of the websocket connection
-
-                                //let bolt_message = BoltMessage::new(json_data, latency);
-                                //sender.send(bolt_message).map_err(|e| WebSocketError::SendError(e.to_string()))?;
+                                //println!("Latency: {} ms", latency); //check the latency of the websocket connection
+                                //let pretty_json = serde_json::to_string_pretty(&json_data["data"][0]).unwrap();
+                                //println!("Received ticker:\n{}", pretty_json);
+                                let ticker = &json_data["data"][0];
+                                let bidOrder = match (ticker["bidPx"].as_str(), ticker["bidSz"].as_str()) {
+                                    (Some(price_str), Some(amount_str)) => {
+                                        let price = price_str.parse::<f64>().expect("OKX Failed to parse bid price");
+                                        let amount = amount_str.parse::<f64>().expect("OKX Failed to parse bid amount");
+                                        OrderBookLevel::new(price, amount)
+                                    },
+                                    _ => panic!("Invalid bid data"),
+                                };
+                                
+                                let askOrder = match (ticker["askPx"].as_str(), ticker["askSz"].as_str()) {
+                                    (Some(price_str), Some(amount_str)) => {
+                                        let price = price_str.parse::<f64>().expect("OKX Failed to parse ask price");
+                                        let amount = amount_str.parse::<f64>().expect("OKX Failed to parse ask amount");
+                                        OrderBookLevel::new(price, amount)
+                                    },
+                                    _ => panic!("Invalid ask data"),
+                                };
+                                println!("Symbol: {}, Bid: {}, Ask: {}", ticker["instId"].as_str().unwrap_or("Unknown"), bidOrder.price, askOrder.price);
                             }
                         },
                         Message::Binary(binary) => {
