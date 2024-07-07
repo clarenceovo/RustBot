@@ -12,6 +12,7 @@ use std::fmt;
 use log::{info, error, debug, warn};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use serde_json::to_string_pretty;
 
 const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
@@ -106,7 +107,7 @@ impl BinanceFuturesWebSocketConnector {
         tokio::spawn(async move {
             let mut order_book = order_book.lock().await;
             for topic in topic_list.iter() {
-                order_book.register_orderbook(topic);
+                order_book.register_orderbook(topic.to_uppercase().as_str());
             }
         });
     
@@ -197,12 +198,15 @@ impl BinanceFuturesWebSocketConnector {
             let ask_order = Self::parse_order(&json_data, "a", "A")?;
             //println!("Symbol: {}, Bid: {}, Ask: {}", json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price);
             let mut order_book = order_book.lock().await;
+            let prettified = to_string_pretty(&json_data)?;
+            //println!("Received JSON:\n{}", prettified);
+
             if let Some(orderbook) = order_book.get_orderbook_mut(json_data["s"].as_str().unwrap()) {
                 orderbook.set_bids_on_snapshot(vec![bid_order]);
                 orderbook.set_asks_on_snapshot(vec![ask_order]);
                 match orderbook.get_mid() {
-                    Ok(mid) => println!("{} Orderbook Mid: {:.2}", json_data["s"].as_str().unwrap(), mid),
-                    Err(e) => println!("Error getting orderbook mid: {}", e),
+                    Ok(mid) => debug!("{} Orderbook Mid: {:.2}", json_data["s"].as_str().unwrap(), mid),
+                    Err(e) => error!("Error getting orderbook mid: {}", e)
                 }
             } else {
                 error!("Orderbook not found for instrument: {}", json_data["s"].as_str().unwrap());
