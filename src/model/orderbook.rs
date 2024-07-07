@@ -82,8 +82,8 @@ impl OrderBook {
     pub fn new(inst_id: String) -> Self {
         OrderBook {
             inst_id,
-            _bids: Vec::new(),
-            _asks: Vec::new(),
+            _bids: Vec::<OrderBookLevel>::new(),
+            _asks: Vec::<OrderBookLevel>::new(),
             timestamp: 0,
             exch_check_sum: 0,
         }
