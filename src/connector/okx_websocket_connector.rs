@@ -9,11 +9,15 @@ use serde_json::Value;
 use crate::model::orderbook::OrderBookLevel;
 use crate::util::time_util::Utils;
 use std::sync::mpsc::Sender;
-//use crate::model::message::Message as BoltMessage;
+use crate::model::orderbook::OrderBooks;
+use crate::model::orderbook::OrderBook;
 
 const OKX_WS_URL: &str = "wss://ws.okx.com:8443/ws/v5/public";
 
-pub struct OkxMarketDataWebSocketConnector;
+pub struct OkxMarketDataWebSocketConnector {
+    topic_list: Vec<String>,
+    order_book : OrderBooks,
+}
 
 #[derive(Debug)]
 pub enum WebSocketError {
@@ -57,17 +61,20 @@ impl From<url::ParseError> for WebSocketError {
 }
 
 impl OkxMarketDataWebSocketConnector {
-    pub fn new() -> Self {
-        OkxMarketDataWebSocketConnector
+    pub fn new(topic_list: Vec<String>) -> Self {
+        OkxMarketDataWebSocketConnector { 
+            topic_list,
+            order_book: OrderBooks::new("OKX".to_string()),
+        }
     }
 
-    pub async fn connect_and_subscribe(&self, instrument_id: &Vec<String>) -> Result<(), WebSocketError> {
+    pub async fn connect_and_subscribe(&self) -> Result<(), WebSocketError> {
         let url = Url::parse(OKX_WS_URL)?;
         let (ws_stream, _) = connect_async(url).await?;
         let (mut write, mut read) = ws_stream.split();
 
         // Subscribe to ticker channel
-        for ticker in instrument_id {
+        for ticker in self.topic_list.iter() {
             let subscribe_message = json!({
                 "op": "subscribe",
                 "args": [{
@@ -88,9 +95,10 @@ impl OkxMarketDataWebSocketConnector {
                             if let Some(ts_difference) = Self::get_ts_difference(&json_data) {
                                 let server_ts = Utils::get_current_timestamp_ms() as i64;
                                 let latency = server_ts - ts_difference;
-                                //println!("Latency: {} ms", latency); //check the latency of the websocket connection
+                                
                                 //let pretty_json = serde_json::to_string_pretty(&json_data["data"][0]).unwrap();
                                 //println!("Received ticker:\n{}", pretty_json);
+                                
                                 let ticker = &json_data["data"][0];
                                 let bidOrder = match (ticker["bidPx"].as_str(), ticker["bidSz"].as_str()) {
                                     (Some(price_str), Some(amount_str)) => {
@@ -144,16 +152,14 @@ impl OkxMarketDataWebSocketConnector {
 
         Ok(())
     }
+
     fn get_ts_difference(json_data: &Value) -> Option<i64> {
         let data = json_data["data"].as_array()?;
         if data.is_empty() {
             return None;
         }
 
-        // We only need the first (and likely only) item in the data array
         let item = data.first()?;
-
-        // Extract the 'ts' field as a string and parse it
         let ts_str = item["ts"].as_str()?;
         ts_str.parse::<i64>().ok()
     }

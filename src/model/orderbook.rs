@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use crc32fast::Hasher;
-use std::str::FromStr;
-
+use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct OrderBookLevel {
     pub price: f64,
@@ -50,6 +49,33 @@ pub struct OrderBook {
     _asks: Vec<OrderBookLevel>,
     pub timestamp: i64,
     pub exch_check_sum: i32,
+}
+
+pub struct OrderBooks{
+    pub exchange_name: String,
+    pub order_books: HashMap<String, OrderBook>
+
+}
+impl OrderBooks {
+    pub fn new(exchange_name: String) -> Self {
+        OrderBooks {
+            exchange_name,
+            order_books: HashMap::new(),
+        }
+    }
+    pub fn register_orderbook(&mut self, inst_id: &str) {
+        println!("Book:{} . Registering orderbook for {}",self.exchange_name,inst_id);
+        self.order_books.insert(inst_id.to_string(), OrderBook::new(inst_id.to_string()));
+    }
+
+    pub fn get_orderbook_immut(&self, inst_id: &str) -> Option<&OrderBook> {
+        self.order_books.get(inst_id)
+    }   
+
+    pub fn get_orderbook_mut(&mut self, inst_id: &str) -> Option<&mut OrderBook> {
+        self.order_books.get_mut(inst_id)
+    }
+    
 }
 
 impl OrderBook {

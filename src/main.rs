@@ -5,23 +5,29 @@ use connector::BinanceFuturesWebSocketConnector;
 pub mod transport;
 use std::error::Error;
 pub mod model;
+use tokio::sync::mpsc;
 //use transport::redis::RedisClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    //let (okx_data_tx, okx_data_rx) = mpsc::channel(100);
+    //let (binance_data_tx, binance_data_rx) = mpsc::channel(100);
     // Create OKX connector task
     let okx_task = tokio::spawn(async {
-        let connector = OkxMarketDataWebSocketConnector::new();
+
         let pairs = vec!["BTC-USDT-SWAP".to_string(), "BTC-USDC-SWAP".to_string(), "ETH-USDT-SWAP".to_string(), "ETH-USDC-SWAP".to_string()];
-        connector.connect_and_subscribe(&pairs).await
+        let connector = OkxMarketDataWebSocketConnector::new(pairs.clone());
+      
+        connector.connect_and_subscribe().await
     });
 
     // Create Binance Futures connector task
     let binance_task = tokio::spawn(async {
-        let connector = BinanceFuturesWebSocketConnector::new();
+
         println!("Connecting to Binance Futures WebSocket...");
         let symbols = vec!["btcusdt".to_string(),"ethusdt".to_string(),"solusdt".to_string(),"bnbusdt".to_string(),"suibusdt".to_string()];
-        connector.connect_and_subscribe(&symbols).await
+        let connector = BinanceFuturesWebSocketConnector::new(symbols.clone());
+        connector.connect_and_subscribe().await
     });
 
     let bolt_hedge_task = tokio::spawn(async {

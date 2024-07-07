@@ -11,7 +11,9 @@ use crate::util::time_util::Utils;
 
 const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
 
-pub struct BinanceFuturesWebSocketConnector;
+pub struct BinanceFuturesWebSocketConnector{
+    topic_list: Vec<String>,
+}
 
 #[derive(Debug)]
 pub enum WebSocketError {
@@ -53,17 +55,18 @@ impl From<url::ParseError> for WebSocketError {
 }
 
 impl BinanceFuturesWebSocketConnector {
-    pub fn new() -> Self {
-        BinanceFuturesWebSocketConnector
+    pub fn new(topic_list: Vec<String>) -> Self {
+        BinanceFuturesWebSocketConnector { topic_list}
+        
     }
 
-    pub async fn connect_and_subscribe(&self, symbols: &Vec<String>) -> Result<(), WebSocketError> {
+    pub async fn connect_and_subscribe(&self) -> Result<(), WebSocketError> {
         let url = Url::parse(BINANCE_FUTURES_WS_URL)?;
         let (ws_stream, _) = connect_async(url).await?;
         let (mut write, mut read) = ws_stream.split();
 
         // Create subscription message
-        let streams: Vec<String> = symbols.iter().map(|symbol| format!("{}@bookTicker", symbol.to_lowercase())).collect();
+        let streams: Vec<String> = self.topic_list.iter().map(|symbol| format!("{}@bookTicker", symbol.to_lowercase())).collect();
         let subscribe_message = json!({
             "method": "SUBSCRIBE",
             "params": streams,
