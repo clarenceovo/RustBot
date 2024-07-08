@@ -85,12 +85,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         };
 
-        if let Err(e) = okx_trade_client.subscribe("BTC-USDT-SWAP").await {
+
+
+        //okx_trade_client.start_pinging().await;
+        sleep(Duration::from_secs(2)).await;
+        if let Err(e) = okx_trade_client.subscribe("BTC-USDC-SWAP").await {
             error!("Failed to subscribe to OKX Trade Client: {:?}", e);
             return;
         }
-
-        okx_trade_client.start_pinging().await;
     });
 
     // Wait for all tasks to complete
