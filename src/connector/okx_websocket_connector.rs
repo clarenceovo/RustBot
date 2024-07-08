@@ -205,7 +205,7 @@ impl OkxMarketDataWebSocketConnector {
                 orderbook.set_bids_on_snapshot(vec![bid_order]);
                 orderbook.set_asks_on_snapshot(vec![ask_order]);
                 match orderbook.get_mid() {
-                    Ok(mid) => debug!("{} Orderbook Mid: {:.2}",ticker["instId"].as_str().unwrap(), mid),
+                    Ok(mid) => println!("{} Orderbook Mid: {:.2}",ticker["instId"].as_str().unwrap(), mid),
                     Err(e) => error!("Error getting orderbook mid: {}", e),
                 }
             } else {
@@ -230,5 +230,8 @@ impl OkxMarketDataWebSocketConnector {
 
     fn get_ts_difference(json_data: &Value) -> Option<i64> {
         json_data["data"].as_array()?.first()?.get("ts")?.as_str()?.parse::<i64>().ok()
+    }
+    pub fn get_order_book(&self) -> Arc<Mutex<OrderBooks>> {
+        Arc::clone(&self.order_book)
     }
 }

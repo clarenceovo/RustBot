@@ -193,19 +193,17 @@ impl BinanceFuturesWebSocketConnector {
             let latency = server_ts - event_ts;
             debug!("Latency: {} ms", latency);
 
-    
             let bid_order = Self::parse_order(&json_data, "b", "B")?;
             let ask_order = Self::parse_order(&json_data, "a", "A")?;
             //println!("Symbol: {}, Bid: {}, Ask: {}", json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price);
             let mut order_book = order_book.lock().await;
-            let prettified = to_string_pretty(&json_data)?;
             //println!("Received JSON:\n{}", prettified);
 
             if let Some(orderbook) = order_book.get_orderbook_mut(json_data["s"].as_str().unwrap()) {
                 orderbook.set_bids_on_snapshot(vec![bid_order]);
                 orderbook.set_asks_on_snapshot(vec![ask_order]);
                 match orderbook.get_mid() {
-                    Ok(mid) => debug!("{} Orderbook Mid: {:.2}", json_data["s"].as_str().unwrap(), mid),
+                    Ok(mid) => println!("{} Orderbook Mid: {:.2}" ,json_data["s"].as_str().unwrap(), mid),
                     Err(e) => error!("Error getting orderbook mid: {}", e)
                 }
             } else {
@@ -226,5 +224,8 @@ impl BinanceFuturesWebSocketConnector {
             .parse::<f64>()?;
 
         Ok(OrderBookLevel::new(price, amount))
+    }
+    pub fn get_order_book(&self) -> Arc<Mutex<OrderBooks>> {
+        Arc::clone(&self.order_book)
     }
 }
