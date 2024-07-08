@@ -12,6 +12,8 @@ use std::fmt;
 use log::{info, error, debug, warn};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
 
 const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
@@ -20,6 +22,7 @@ const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 pub struct BinanceFuturesWebSocketConnector {
     topic_list: Vec<String>,
     order_book: Arc<Mutex<OrderBooks>>,
+    tx: Sender<OrderBooks>,
     config: ConnectorConfig,
 }
 
@@ -97,9 +100,13 @@ impl BinanceFuturesWebSocketConnector {
         let order_book = Arc::new(Mutex::new(OrderBooks::new("BinanceFutures".to_string())));
         let config = ConnectorConfig::default();
         
+        // Dummy channel
+        let (tx, _rx) = mpsc::channel::<OrderBooks>(1);
+        
         let connector = BinanceFuturesWebSocketConnector { 
             topic_list: topic_list.clone(),
             order_book: order_book.clone(),
+            tx,
             config,
         };
         
@@ -111,6 +118,10 @@ impl BinanceFuturesWebSocketConnector {
         });
     
         connector
+    }
+
+    pub fn set_sender(&mut self, new_tx: Sender<OrderBooks>) {
+        self.tx = new_tx;
     }
 
     pub async fn connect_and_subscribe(&self) -> Result<(), WebSocketError> {
@@ -149,7 +160,7 @@ impl BinanceFuturesWebSocketConnector {
                 Ok(Some(message)) => {
                     match message? {
                         Message::Text(text) => {
-                            if let Err(e) = Self::process_text_message(&self.order_book, &text).await {
+                            if let Err(e) = self.process_text_message(&text).await {
                                 error!("Error processing text message: {}", e);
                             }
                         },
@@ -184,7 +195,7 @@ impl BinanceFuturesWebSocketConnector {
         }
     }
     
-    async fn process_text_message(order_book: &Arc<Mutex<OrderBooks>>, text: &str) -> Result<(), WebSocketError> {
+    async fn process_text_message(&self, text: &str) -> Result<(), WebSocketError> {
         let json_data: Value = serde_json::from_str(text)?;
         if json_data["e"].as_str() == Some("bookTicker") {
             let server_ts = Utils::get_current_timestamp_ms() as i64;
@@ -194,16 +205,19 @@ impl BinanceFuturesWebSocketConnector {
 
             let bid_order = Self::parse_order(&json_data, "b", "B")?;
             let ask_order = Self::parse_order(&json_data, "a", "A")?;
-            //println!("Symbol: {}, Bid: {}, Ask: {}", json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price);
-            let mut order_book = order_book.lock().await;
-            //println!("Received JSON:\n{}", prettified);
+            // println!("Symbol: {}, Bid: {}, Ask: {}", json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price);
+            let mut order_book = self.order_book.lock().await;
 
             if let Some(orderbook) = order_book.get_orderbook_mut(json_data["s"].as_str().unwrap()) {
                 orderbook.set_bids_on_snapshot(vec![bid_order]);
                 orderbook.set_asks_on_snapshot(vec![ask_order]);
-                match orderbook.get_mid() {
-                    Ok(mid) => info!("{} Orderbook Mid: {:.2}" ,json_data["s"].as_str().unwrap(), mid),
-                    Err(e) => error!("Error getting orderbook mid: {}", e)
+                let updated_order_books = (*order_book).clone();
+
+                drop(order_book);
+    
+                if let Err(e) = self.tx.send(updated_order_books).await {
+                    error!("Failed to send updated OrderBooks: {}", e);
+                    return Err(WebSocketError::SendError(e.to_string()));
                 }
             } else {
                 error!("Orderbook not found for instrument: {}", json_data["s"].as_str().unwrap());
@@ -224,6 +238,7 @@ impl BinanceFuturesWebSocketConnector {
 
         Ok(OrderBookLevel::new(price, amount))
     }
+    
     pub fn get_order_book(&self) -> Arc<Mutex<OrderBooks>> {
         Arc::clone(&self.order_book)
     }

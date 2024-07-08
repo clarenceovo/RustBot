@@ -7,14 +7,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug)]
-struct OkxAuth {
+pub struct OkxAuth {
     api_key: String,
     api_secret_key: String,
     passphrase: String,
 }
 
 #[derive(Serialize)]
-struct LoginArgs {
+pub struct LoginArgs {
     apiKey: String,
     passphrase: String,
     timestamp: String,
@@ -22,13 +22,13 @@ struct LoginArgs {
 }
 
 #[derive(Serialize)]
-struct LoginParam {
+pub struct LoginParam {
     op: String,
     args: Vec<LoginArgs>,
 }
 
 impl OkxAuth {
-    fn new(api_key: &str, api_secret_key: &str, passphrase: &str) -> Self {
+    pub fn new(api_key: &str, api_secret_key: &str, passphrase: &str) -> Self {
         OkxAuth {
             api_key: api_key.to_string(),
             api_secret_key: api_secret_key.to_string(),
@@ -36,11 +36,11 @@ impl OkxAuth {
         }
     }
 
-    fn get_local_timestamp() -> u64 {
+    pub fn get_local_timestamp() -> u64 {
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
     }
 
-    fn okx_login_params(&self) -> LoginParam {
+    pub fn okx_login_params(&self) -> LoginParam {
         let ts = OkxAuth::get_local_timestamp().to_string();
         let message = format!("{}GET/users/self/verify", ts);
 

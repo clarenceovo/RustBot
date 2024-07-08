@@ -29,7 +29,7 @@ enum PosSide {
     Net,
 }
 
-struct OkxOrder {
+pub struct OkxOrder {
     ref_id: Uuid,
     exchange_name: String,
     order_id: String,

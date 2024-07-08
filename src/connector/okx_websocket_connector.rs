@@ -216,10 +216,7 @@ impl OkxMarketDataWebSocketConnector {
                 orderbook.set_bids_on_snapshot(vec![bid_order]);
                 orderbook.set_asks_on_snapshot(vec![ask_order]);
                 
-                match orderbook.get_mid() {
-                    Ok(mid) => info!("{} Orderbook Mid: {:.2}", ticker["instId"].as_str().unwrap(), mid),
-                    Err(e) => error!("Error getting orderbook mid: {}", e),
-                }
+
                 let updated_order_books = (*order_book).clone();
 
                 drop(order_book);

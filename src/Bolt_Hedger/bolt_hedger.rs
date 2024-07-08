@@ -28,14 +28,14 @@ impl BoltHedger {
                 // Handle channel closure, maybe reconnect or exit
             }
         }
-        println!("Running strategy")
+        
     }
 
     fn process_orderbooks(&self, orderbooks: OrderBooks) {
         for (inst_id, orderbook_result) in orderbooks.order_books.iter() {
             match orderbook_result.get_mid(){
                 Ok(mid) => {
-                    println!("Mid price for {} is {}", inst_id, mid);
+                    //println!("Mid price for {} is {}", inst_id, mid);
                     
                 }
                 Err(e) => {

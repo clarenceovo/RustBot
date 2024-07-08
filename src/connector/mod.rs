@@ -2,3 +2,5 @@ pub mod okx_websocket_connector;
 pub use okx_websocket_connector::OkxMarketDataWebSocketConnector;
 pub mod binance_websocket_connector;
 pub use binance_websocket_connector::BinanceFuturesWebSocketConnector;
+pub mod okx_trade_client;
+pub use okx_trade_client::OkxTradeClient;
