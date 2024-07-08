@@ -12,7 +12,6 @@ use std::fmt;
 use log::{info, error, debug, warn};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use serde_json::to_string_pretty;
 
 const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;

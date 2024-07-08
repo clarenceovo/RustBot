@@ -10,6 +10,7 @@ use Bolt_Hedger::bolt_hedger::BoltHedger;
 use tokio::sync::mpsc;
 use log::{info, error, debug, warn};
 use model::orderbook::OrderBooks;
+use tokio::time::{sleep, Duration};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize logging
@@ -35,10 +36,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         info!("Connecting to Binance Futures WebSocket...");
         binance_connector.connect_and_subscribe().await
     });
-
+    sleep(Duration::from_secs(5)).await;
     let bolt_hedge_task = tokio::spawn(async move {
-        // Implement your bolt hedge logic here
-        // You can use okx_order_book and binance_order_book here if needed
+        let mut bolt_hedger = BoltHedger::new(okx_rx);
+        bolt_hedger.start().await;
     });
 
     // Wait for all tasks to complete
