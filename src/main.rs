@@ -1,10 +1,8 @@
 mod connector;
 pub mod util;
-use base64::read;
 use tokio::fs::File;
-use tokio::io::{AsyncReadExt};
-use connector::OkxMarketDataWebSocketConnector;
-use connector::BinanceFuturesWebSocketConnector;
+use tokio::io::AsyncReadExt;
+use connector::{OkxMarketDataWebSocketConnector, BinanceFuturesWebSocketConnector};
 pub mod transport;
 use std::error::Error;
 pub mod model;
@@ -13,13 +11,12 @@ use Bolt_Hedger::bolt_hedger::BoltHedger;
 use model::okx_order::OkxOrder;
 use tokio::sync::mpsc;
 use serde_json::Value;
-use log::{info, error, debug, warn};
+use log::{info, error};
 use model::orderbook::OrderBooks;
 use tokio::time::{sleep, Duration};
-use std::path::Path;
 use connector::okx_trade_client::OkxTradeClient;
 
-async fn read_config(file_path: &str) -> Result<Value, Box<dyn Error>> {
+async fn read_config(file_path: &str) -> Result<Value, Box<dyn Error + Send + Sync>> {
     match File::open(file_path).await {
         Ok(mut file) => {
             let mut contents = Vec::new();
@@ -29,23 +26,21 @@ async fn read_config(file_path: &str) -> Result<Value, Box<dyn Error>> {
         },
         Err(e) => {
             eprintln!("Failed to open file {}: {}", file_path, e);
-            Err(Box::new(e))
+            Err(Box::new(e) as Box<dyn Error + Send + Sync>)
         }
     }
 }
 
-
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Initialize logging
     let credential_config = read_config("config/credential.json").await.unwrap();
 
     let (okx_tx, okx_rx) = mpsc::channel::<OrderBooks>(1000);
     let (binance_tx, binance_rx) = mpsc::channel::<OrderBooks>(1000);
-    //let (okx_private_tx , okx_private_rx) = mpsc::channel::<>(1000);
     let (okx_trade_tx, okx_trade_rx) = mpsc::channel::<OkxOrder>(1000);
     let pairs = vec!["BTC-USDT-SWAP".to_string()];
-    let mut okx_connector = OkxMarketDataWebSocketConnector::new(pairs.clone(),);
+    let mut okx_connector = OkxMarketDataWebSocketConnector::new(pairs.clone());
 
     okx_connector.set_sender(okx_tx);
 
@@ -53,48 +48,66 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let binance_connector = BinanceFuturesWebSocketConnector::new(symbols.clone());
 
     // Start the connector tasks
-
     let okx_task = tokio::spawn(async move {
         info!("Connecting to OKX WebSocket...");
-        okx_connector.connect_and_subscribe().await
+        if let Err(e) = okx_connector.connect_and_subscribe().await {
+            error!("Error in OKX connector: {:?}", e);
+        }
     });
 
     let binance_task = tokio::spawn(async move {
         info!("Connecting to Binance Futures WebSocket...");
-        binance_connector.connect_and_subscribe().await
+        if let Err(e) = binance_connector.connect_and_subscribe().await {
+            error!("Error in Binance connector: {:?}", e);
+        }
     });
-    // 
 
     // Start the BoltHedger task
     sleep(Duration::from_secs(1)).await;
     let bolt_hedge_task = tokio::spawn(async move {
         let mut bolt_hedger = BoltHedger::new(okx_rx);
-        bolt_hedger.start().await;
+        if let Err(e) = bolt_hedger.start().await {
+            error!("Error in BoltHedger: {:?}", e);
+        }
     });
-    
-    
+
     let okx_trade_task = tokio::spawn(async move {
         info!("Connecting to OKX Trade WebSocket...");
-        let okx_trade_client = OkxTradeClient::new(
+        let okx_trade_client = match OkxTradeClient::new(
             credential_config["okx"]["api_key"].as_str().unwrap().to_string(),
             credential_config["okx"]["api_secret"].as_str().unwrap().to_string(),
             credential_config["okx"]["passphrase"].as_str().unwrap().to_string(),
-        ).await;
+        ).await {
+            Ok(client) => client,
+            Err(e) => {
+                error!("Failed to create OKX Trade Client: {:?}", e);
+                return;
+            }
+        };
+
+        if let Err(e) = okx_trade_client.subscribe("BTC-USDT-SWAP").await {
+            error!("Failed to subscribe to OKX Trade Client: {:?}", e);
+            return;
+        }
+
         okx_trade_client.start_pinging().await;
     });
 
     // Wait for all tasks to complete
-    let (okx_result, binance_result, bolt_hedge_result) = tokio::join!(okx_task, binance_task, bolt_hedge_task);
+    let (okx_result, binance_result, bolt_hedge_result, okx_trade_result) = tokio::join!(okx_task, binance_task, bolt_hedge_task, okx_trade_task);
 
     // Handle results
-    if let Err(e) = okx_result? {
-        error!("OKX task error: {}", e);
+    if let Err(e) = okx_result {
+        error!("OKX task error: {:?}", e);
     }
-    if let Err(e) = binance_result? {
-        error!("Binance task error: {}", e);
+    if let Err(e) = binance_result {
+        error!("Binance task error: {:?}", e);
     }
     if let Err(e) = bolt_hedge_result {
-        error!("Bolt hedge task error: {}", e);
+        error!("Bolt hedge task error: {:?}", e);
+    }
+    if let Err(e) = okx_trade_result {
+        error!("OKX trade task error: {:?}", e);
     }
 
     Ok(())

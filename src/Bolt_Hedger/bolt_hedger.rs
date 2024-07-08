@@ -5,6 +5,7 @@ use serde_json::json;
 use tokio::sync::mpsc::Receiver;
 use std::thread;
 use tokio::time::{sleep, Duration};
+use std::error::Error;
 
 
 pub struct BoltHedger {
@@ -46,7 +47,7 @@ impl BoltHedger {
         }
     }
 
-    pub async fn start(&mut self) {
+    pub async fn start(&mut self) ->Result<(), Box<dyn Error + Send + Sync>> {
         info!("Starting Bolt Hedger");
         loop {
             self.run_strategy().await;

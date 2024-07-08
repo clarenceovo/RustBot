@@ -12,10 +12,17 @@ struct AuthRequest {
     args: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrderChannel {
+    pub channel: String,
+    pub inst_type: String,
+    pub inst_id: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct SubscriptionRequest {
     op: String,
-    args: Vec<String>,
+    args: Vec<OrderChannel>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,65 +37,86 @@ pub struct OkxTradeClient {
 }
 
 impl OkxTradeClient {
-    pub async fn new(api_key: String, api_secret: String, passphrase: String) -> Self {
+    pub async fn new(api_key: String, api_secret: String, passphrase: String) -> Result<Self, Box<dyn std::error::Error>> {
         let (ws_sender, mut ws_receiver) = mpsc::channel(100);
         let okx_auth = OkxAuth::new(&api_key, &api_secret, &passphrase);
         
         tokio::spawn(async move {
             let url = "wss://ws.okx.com:8443/ws/v5/private";
-            let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
+            match connect_async(url).await {
+                Ok((ws_stream, _)) => {
+                    let (mut write, mut read) = ws_stream.split();
 
-            let (mut write, mut read) = ws_stream.split();
+                    // Get Auth message
+                    let auth_message = serde_json::to_string(&okx_auth.okx_login_params()).unwrap();
 
-            // Get Auth message
-            let auth_message = serde_json::to_string(&okx_auth.okx_login_params()).unwrap();
-
-            write.send(Message::Text(auth_message)).await.unwrap();
-
-            // Handle incoming messages
-            while let Some(message) = read.next().await {
-                match message {
-                    Ok(msg) => match msg {
-                        Message::Text(text) => {
-                            println!("Received: {}", text);
-                        }
-                        Message::Binary(bin) => {
-                            println!("Received binary: {:?}", bin);
-                        }
-                        _ => {}
-                    },
-                    Err(e) => {
-                        eprintln!("WebSocket error: {}", e);
-                        break;
+                    if let Err(e) = write.send(Message::Text(auth_message)).await {
+                        eprintln!("Failed to send auth message: {}", e);
+                        return;
                     }
+
+                    // Handle incoming messages
+                    while let Some(message) = read.next().await {
+                        match message {
+                            Ok(msg) => match msg {
+                                Message::Text(text) => {
+                                    println!("Received: {}", text);
+                                }
+                                Message::Binary(bin) => {
+                                    println!("Received binary: {:?}", bin);
+                                }
+                                _ => {}
+                            },
+                            Err(e) => {
+                                eprintln!("WebSocket error: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Failed to connect: {}", e);
                 }
             }
         });
 
-        OkxTradeClient { ws_sender }
+        Ok(OkxTradeClient { ws_sender })
     }
 
-    pub async fn subscribe(&self, channel: &str) {
+    pub async fn subscribe(&self, channel: &str) -> Result<(), mpsc::error::SendError<Message>> {
+        let channel = OrderChannel {
+            channel: "orders".to_string(),
+            inst_type: "SWAP".to_string(),
+            inst_id: channel.to_string(),
+        };
         let subscription_request = SubscriptionRequest {
             op: "subscribe".to_string(),
-            args: vec![channel.to_string()],
+            args: vec![channel],
         };
-        let message = serde_json::to_string(&subscription_request).unwrap();
-        self.ws_sender.send(Message::Text(message)).await.unwrap();
+        let message = serde_json::to_string(&subscription_request).map_err(|e| {
+            mpsc::error::SendError(Message::Text(format!("Serialization error: {}", e)))
+        })?;
+        println!("Sending Subscription: {}", message);
+        self.ws_sender.send(Message::Text(message)).await
     }
 
-    pub async fn send(&self, message: Message) {
-        self.ws_sender.send(message).await.unwrap();
+    pub async fn send(&self, message: Message) -> Result<(), mpsc::error::SendError<Message>> {
+        self.ws_sender.send(message).await
     }
 
     pub async fn start_pinging(&self) {
-        let mut interval = interval(Duration::from_secs(5));
+        let mut interval = interval(Duration::from_secs(1));
         let ws_sender = self.ws_sender.clone();
         tokio::spawn(async move {
             loop {
                 interval.tick().await;
-                println!("Sending ping");
-                ws_sender.send(Message::Ping(vec![])).await.unwrap();
+                match ws_sender.send(Message::Text("ping".to_string())).await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        eprintln!("Failed to send ping: {}. Stopping ping service.", e);
+                        break;
+                    }
+                }
             }
         });
     }
