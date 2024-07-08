@@ -203,7 +203,7 @@ impl BinanceFuturesWebSocketConnector {
                 orderbook.set_bids_on_snapshot(vec![bid_order]);
                 orderbook.set_asks_on_snapshot(vec![ask_order]);
                 match orderbook.get_mid() {
-                    Ok(mid) => println!("{} Orderbook Mid: {:.2}" ,json_data["s"].as_str().unwrap(), mid),
+                    Ok(mid) => info!("{} Orderbook Mid: {:.2}" ,json_data["s"].as_str().unwrap(), mid),
                     Err(e) => error!("Error getting orderbook mid: {}", e)
                 }
             } else {

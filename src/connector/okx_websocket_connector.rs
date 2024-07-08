@@ -12,6 +12,8 @@ use std::fmt;
 use log::{info, error, debug, warn};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
 
 const OKX_WS_URL: &str = "wss://ws.okx.com:8443/ws/v5/public";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
@@ -20,6 +22,7 @@ const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 pub struct OkxMarketDataWebSocketConnector {
     topic_list: Vec<String>,
     order_book: Arc<Mutex<OrderBooks>>,
+    tx: Sender<OrderBooks>,
     config: ConnectorConfig,
 }
 
@@ -97,9 +100,13 @@ impl OkxMarketDataWebSocketConnector {
         let order_book = Arc::new(Mutex::new(OrderBooks::new("OKX".to_string())));
         let config = ConnectorConfig::default();
         
+        // Create a channel that will be used as a placeholder
+        let (tx, _rx) = mpsc::channel::<OrderBooks>(1000);
+        
         let connector = OkxMarketDataWebSocketConnector { 
             topic_list: topic_list.clone(),
             order_book: order_book.clone(),
+            tx,
             config,
         };
         
@@ -112,6 +119,10 @@ impl OkxMarketDataWebSocketConnector {
         });
     
         connector
+    }
+
+    pub fn set_sender(&mut self, new_tx: Sender<OrderBooks>) {
+        self.tx = new_tx;
     }
 
     pub async fn connect_and_subscribe(&self) -> Result<(), WebSocketError> {
@@ -154,7 +165,7 @@ impl OkxMarketDataWebSocketConnector {
                 Ok(Some(message)) => {
                     match message? {
                         Message::Text(text) => {
-                            if let Err(e) = Self::process_text_message(&self.order_book, &text).await {
+                            if let Err(e) = self.process_text_message(&text).await {
                                 error!("Error processing text message: {}", e);
                             }
                         },
@@ -189,7 +200,7 @@ impl OkxMarketDataWebSocketConnector {
         }
     }
     
-    async fn process_text_message(order_book: &Arc<Mutex<OrderBooks>>, text: &str) -> Result<(), WebSocketError> {
+    async fn process_text_message(&self, text: &str) -> Result<(), WebSocketError> {
         let json_data: Value = serde_json::from_str(text)?;
         if let Some(ts_difference) = Self::get_ts_difference(&json_data) {
             let server_ts = Utils::get_current_timestamp_ms() as i64;
@@ -200,13 +211,22 @@ impl OkxMarketDataWebSocketConnector {
             let bid_order = Self::parse_order(ticker, "bidPx", "bidSz")?;
             let ask_order = Self::parse_order(ticker, "askPx", "askSz")?;
     
-            let mut order_book = order_book.lock().await;
+            let mut order_book = self.order_book.lock().await;
             if let Some(orderbook) = order_book.get_orderbook_mut(ticker["instId"].as_str().unwrap()) {
                 orderbook.set_bids_on_snapshot(vec![bid_order]);
                 orderbook.set_asks_on_snapshot(vec![ask_order]);
+                
                 match orderbook.get_mid() {
-                    Ok(mid) => println!("{} Orderbook Mid: {:.2}",ticker["instId"].as_str().unwrap(), mid),
+                    Ok(mid) => info!("{} Orderbook Mid: {:.2}", ticker["instId"].as_str().unwrap(), mid),
                     Err(e) => error!("Error getting orderbook mid: {}", e),
+                }
+                let updated_order_books = (*order_book).clone();
+
+                drop(order_book);
+    
+                if let Err(e) = self.tx.send(updated_order_books).await {
+                    error!("Failed to send updated OrderBooks: {}", e);
+                    return Err(WebSocketError::SendError(e.to_string()));
                 }
             } else {
                 error!("Orderbook not found for instrument: {}", ticker["instId"].as_str().unwrap());
@@ -231,6 +251,7 @@ impl OkxMarketDataWebSocketConnector {
     fn get_ts_difference(json_data: &Value) -> Option<i64> {
         json_data["data"].as_array()?.first()?.get("ts")?.as_str()?.parse::<i64>().ok()
     }
+
     pub fn get_order_book(&self) -> Arc<Mutex<OrderBooks>> {
         Arc::clone(&self.order_book)
     }

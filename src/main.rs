@@ -5,23 +5,26 @@ use connector::BinanceFuturesWebSocketConnector;
 pub mod transport;
 use std::error::Error;
 pub mod model;
+pub mod Bolt_Hedger;
+use Bolt_Hedger::bolt_hedger::BoltHedger;
 use tokio::sync::mpsc;
 use log::{info, error, debug, warn};
-
+use model::orderbook::OrderBooks;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize logging
 
+    let (okx_tx, okx_rx) = mpsc::channel::<OrderBooks>(1000);
+    let (binance_tx, binance_rx) = mpsc::channel::<OrderBooks>(1000);
 
     let pairs = vec!["BTC-USDT-SWAP".to_string(), "BTC-USDC-SWAP".to_string(), "ETH-USDT-SWAP".to_string(), "ETH-USDC-SWAP".to_string()];
-    let okx_connector = OkxMarketDataWebSocketConnector::new(pairs.clone());
-    
+    let mut okx_connector = OkxMarketDataWebSocketConnector::new(pairs.clone(),);
+    okx_connector.set_sender(okx_tx);
+
     let symbols = vec!["btcusdt".to_string(), "ethusdt".to_string(), "solusdt".to_string(), "bnbusdt".to_string(), "suibusdt".to_string()];
     let binance_connector = BinanceFuturesWebSocketConnector::new(symbols.clone());
-    
+
     // Share OrderBooks if needed
-    let okx_order_book = okx_connector.get_order_book();
-    let binance_order_book = binance_connector.get_order_book();
 
     let okx_task = tokio::spawn(async move {
         info!("Connecting to OKX WebSocket...");

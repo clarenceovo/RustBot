@@ -1,40 +1,38 @@
+use crate::connector::{BinanceFuturesWebSocketConnector, OkxMarketDataWebSocketConnector};
+use log::{debug, error, info, warn};
 use serde_json::json;
-use tracing::{info, error, span, Level};
-use tracing_subscriber;
-use crate::connector::OkxWebSocketConnector;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use transport::redis::RedisClient;
 
-pub struct BoltHedger{
-    connector: OkxWebSocketConnector,
-    message_rx: Receiver<Message>,
-
+pub struct BoltHedger {
+    okx_connector: OkxMarketDataWebSocketConnector,
+    binance_connector: BinanceFuturesWebSocketConnector,
 }
 
-impl BoltHedger{
-    pub fn new() -> Self {
-        BoltHedger
+impl BoltHedger {
+    pub fn new(
+        okx_connector: OkxMarketDataWebSocketConnector,
+        binance_connector: BinanceFuturesWebSocketConnector,
+    ) -> Self {
+        BoltHedger {
+            okx_connector,
+            binance_connector,
+        }
     }
-
+    fn run_strategy(&self) {
+        print!("Hello from run_strategy");
+    }
     pub fn start(&self) {
-        let span = span!(Level::INFO, "bolt_hedger");
-        let _enter = span.enter();
         info!("Starting Bolt Hedger");
-        let message = json!({
-            "message": "Bolt Hedger started"
-        });
-        info!("{}", message);
+        loop {
+            self.run_strategy();
+        
+        }
     }
 
     pub fn stop(&self) {
-        let span = span!(Level::INFO, "bolt_hedger");
-        let _enter = span.enter();
         info!("Stopping Bolt Hedger");
         let message = json!({
             "message": "Bolt Hedger stopped"
         });
         info!("{}", message);
     }
-
-
 }

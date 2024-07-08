@@ -42,7 +42,7 @@ impl Ord for OrderBookLevel {
 
 }
 
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct OrderBook {
     pub inst_id: String,
     _bids: Vec<OrderBookLevel>,
@@ -76,6 +76,14 @@ impl OrderBooks {
         self.order_books.get_mut(inst_id)
     }
     
+}
+impl Clone for OrderBooks {
+    fn clone(&self) -> Self {
+        OrderBooks {
+            exchange_name: self.exchange_name.clone(),
+            order_books: self.order_books.clone(),
+        }
+    }
 }
 
 impl OrderBook {
