@@ -1,0 +1,14 @@
+{
+
+    "okx": {
+        "ws_endpoint": "wss://wsaws.okx.com:8443/ws/v5/public",
+        "ws_endpoint_private": "wss://wsaws.okx.com:8443/ws/v5/private",
+        "rest_endpoint": "https://aws.okx.com"
+    },
+    "okx_uat": {
+        "ws_endpoint": "wss://wspap.okx.com:8443/ws/v5/public?brokerId=9999",
+        "ws_endpoint_private": "wss://wsaws.okx.com:8443/ws/v5/private?brokerId=9999",
+        "rest_endpoint": "https://www.okx.com"
+    }
+
+}
