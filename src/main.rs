@@ -18,11 +18,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (okx_tx, okx_rx) = mpsc::channel::<OrderBooks>(1000);
     let (binance_tx, binance_rx) = mpsc::channel::<OrderBooks>(1000);
 
-    let pairs = vec!["BTC-USDT-SWAP".to_string(), "BTC-USDC-SWAP".to_string(), "ETH-USDT-SWAP".to_string(), "ETH-USDC-SWAP".to_string()];
+    let pairs = vec!["BTC-USDT-SWAP".to_string()];
     let mut okx_connector = OkxMarketDataWebSocketConnector::new(pairs.clone(),);
     okx_connector.set_sender(okx_tx);
 
-    let symbols = vec!["btcusdt".to_string(), "ethusdt".to_string(), "solusdt".to_string(), "bnbusdt".to_string(), "suibusdt".to_string()];
+    let symbols = vec!["btcusdt".to_string()];
     let binance_connector = BinanceFuturesWebSocketConnector::new(symbols.clone());
 
     // Share OrderBooks if needed
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         info!("Connecting to Binance Futures WebSocket...");
         binance_connector.connect_and_subscribe().await
     });
-    sleep(Duration::from_secs(5)).await;
+    sleep(Duration::from_secs(1)).await;
     let bolt_hedge_task = tokio::spawn(async move {
         let mut bolt_hedger = BoltHedger::new(okx_rx);
         bolt_hedger.start().await;

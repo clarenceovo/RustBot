@@ -28,6 +28,7 @@ impl BoltHedger {
                 // Handle channel closure, maybe reconnect or exit
             }
         }
+        println!("Running strategy")
     }
 
     fn process_orderbooks(&self, orderbooks: OrderBooks) {
@@ -50,7 +51,7 @@ impl BoltHedger {
         loop {
             self.run_strategy().await;
             // Optional: Add a small delay to prevent tight looping
-            sleep(Duration::from_millis(10)).await;
+            sleep(Duration::from_millis(1)).await;
         }
     }
 
