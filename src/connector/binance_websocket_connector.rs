@@ -205,7 +205,7 @@ impl BinanceFuturesWebSocketConnector {
 
             let bid_order = Self::parse_order(&json_data, "b", "B")?;
             let ask_order = Self::parse_order(&json_data, "a", "A")?;
-            // println!("Symbol: {}, Bid: {}, Ask: {}", json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price);
+            println!("Symbol: {}, Bid: {}, Ask: {} @ {}", json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price,Utils::get_current_time());
             let mut order_book = self.order_book.lock().await;
 
             if let Some(orderbook) = order_book.get_orderbook_mut(json_data["s"].as_str().unwrap()) {

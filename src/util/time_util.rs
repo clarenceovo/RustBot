@@ -1,5 +1,5 @@
 use std::time::{SystemTime, UNIX_EPOCH};
-
+use chrono::prelude::Utc;
 pub struct Utils;
 
 impl Utils {
@@ -15,6 +15,10 @@ impl Utils {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_millis()
+    }
+    pub fn get_current_time() -> String {
+        let now = Utc::now();
+        now.format("%Y-%m-%d %H:%M:%S%.3f").to_string()
     }
 
     pub fn format_number(num: f64, decimal_places: usize) -> String {

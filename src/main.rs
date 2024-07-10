@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     okx_connector.set_sender(okx_tx);
 
-    let symbols = vec!["btcusdt".to_string()];
+    let symbols = vec!["btcusdt".to_string(),"ethusdt".to_string(),"bnbusdt".to_string(),"solusdt".to_string()];
     let binance_connector = BinanceFuturesWebSocketConnector::new(symbols.clone());
 
     // Start the connector tasks
