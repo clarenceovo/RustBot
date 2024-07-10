@@ -6,8 +6,10 @@ use tokio::sync::Mutex;
 use std::time::Duration;
 use tokio::time::interval;
 use serde_json::Value;
+use crate::model::okx_order::OkxOrder;
 use crate::util::okx_auth::OkxAuth;
 use crate::model::okx_order_message::{OkxOrderMessage, OrderData};
+use crate::util::time_util;
 use std::error::Error;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,7 +62,7 @@ impl OkxTradeClient {
                 eprintln!("Failed to send auth message: {}", e);
                 return;
             }
-
+            //let last_meesage_received_ts = time_util::get_current_timestamp();
             // Handle incoming messages
             while let Some(message) = read.next().await {
                 match message {
@@ -84,13 +86,15 @@ impl OkxTradeClient {
             }
         });
 
-        // Handle outgoing messages
         let write_clone = write.clone();
+        //Send message from TX RX channel
         tokio::spawn(async move {
             while let Some(message) = ws_receiver.recv().await {
                 if let Err(e) = write_clone.lock().await.send(message).await {
                     eprintln!("Failed to send message: {}", e);
+                    //ProcessUtils::kill_process();
                     break;
+                    
                 }
             }
         });
@@ -112,9 +116,12 @@ impl OkxTradeClient {
 
             match serde_json::from_str::<OkxOrderMessage>(message) {
                 Ok(okx_message) => {
-                    println!("Received order message for channel: {}", okx_message.arg.channel);
+                    //println!("Received order message for channel: {}", okx_message.arg.channel);
                     for order_data in okx_message.data.iter() {
-                        println!("Order data: {:?}", order_data);
+                        //println!("Order data: {:?}", order_data);
+                        if order_data.fill_sz == order_data.sz {
+                            println!("Order filled: {}| Side :{} | Side:{} ", order_data.ord_id, order_data.side, order_data.sz);
+                        }
                     }
                 }
                 Err(e) => {
@@ -127,6 +134,10 @@ impl OkxTradeClient {
 
 
         Ok(())
+    }
+
+    pub async fn send_order(&self,order : OkxOrder){
+
     }
 
     pub async fn subscribe(&self, channel: &str) -> Result<(), tokio::sync::mpsc::error::SendError<Message>> {
@@ -142,6 +153,7 @@ impl OkxTradeClient {
         let message = serde_json::to_string(&subscription_request).map_err(|e| {
             tokio::sync::mpsc::error::SendError(Message::Text(format!("Serialization error: {}", e)))
         })?;
+        println!("Sending subscription message: {}", message);
         self.ws_sender.send(Message::Text(message)).await
     }
 
@@ -156,7 +168,7 @@ impl OkxTradeClient {
             loop {
                 interval.tick().await;
                 match ws_sender.send(Message::Text("ping".to_string())).await {
-                    Ok(_) => {}
+                    Ok(_) => {println!("Sent ping");}
                     Err(e) => {
                         eprintln!("Failed to send ping: {}. Stopping ping service.", e);
                         break;

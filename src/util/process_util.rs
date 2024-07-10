@@ -3,7 +3,7 @@ pub struct ProcessUtils;
 
 impl ProcessUtils {
 
-    fn kill_program() {
+    pub fn kill_program() {
         println!("Killing the program");
         process::exit(0);
     }
