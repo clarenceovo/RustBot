@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrderData {
+pub struct OrderFillData {
     #[serde(rename = "instType")]
     pub inst_type: String,
     #[serde(rename = "instId")]
@@ -144,5 +144,5 @@ pub struct Arg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OkxOrderMessage {
     pub arg: Arg,
-    pub data: Vec<OrderData>,
+    pub data: Vec<OrderFillData>,
 }

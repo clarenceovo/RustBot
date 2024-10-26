@@ -208,6 +208,7 @@ impl OkxMarketDataWebSocketConnector {
             debug!("Latency: {} ms", latency);
     
             let ticker = &json_data["data"][0];
+            println!("Received ticker: {}", ticker.to_string());
             let bid_order = Self::parse_order(ticker, "bidPx", "bidSz")?;
             let ask_order = Self::parse_order(ticker, "askPx", "askSz")?;
     
