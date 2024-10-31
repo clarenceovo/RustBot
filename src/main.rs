@@ -59,9 +59,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     okx_connector.set_sender(okx_tx);
 
-    let symbols = vec!["btcusdt".to_string(),"ethusdt".to_string(),"suiusdt".to_string(),"solusdt".to_string()];
+    let symbols = vec!["btcusdt".to_string(),"ethusdt".to_string(),"suiusdt".to_string(),"solusdt".to_string(),"aaveusdt".to_string(),"bnbusdt".to_string(),"dogeusdt".to_string(),"adausdt".to_string(),"linkusdt".to_string(),"ltcusdt".to_string(),"xrpusdt".to_string(),"dotusdt".to_string(),"uniusdt".to_string(),"maticusdt".to_string(),"ethusdt".to_string(),"suiusdt".to_string()];
     
-    let binance_connector = BinanceFuturesWebSocketConnector::new(&redis_client,symbols.clone());
+    let mut binance_connector = BinanceFuturesWebSocketConnector::new(&redis_client,symbols.clone());
 
     // Start the connector tasks
     let okx_task = tokio::spawn(async move {
