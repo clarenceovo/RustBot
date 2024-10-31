@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::{timeout, sleep};
 use futures_util::{SinkExt, StreamExt};
@@ -14,12 +15,16 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
+use crate::transport::redis::RedisClient;
+use redis::AsyncCommands;
+
 
 const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
 pub struct BinanceFuturesWebSocketConnector {
+    redis_conn: Arc<RedisClient>,
     topic_list: Vec<String>,
     order_book: Arc<Mutex<OrderBooks>>,
     tx: Sender<OrderBooks>,
@@ -96,7 +101,8 @@ impl From<std::num::ParseFloatError> for WebSocketError {
 }
 
 impl BinanceFuturesWebSocketConnector {
-    pub fn new(topic_list: Vec<String>) -> Self {
+    pub fn new(redis_conn:&Arc<RedisClient>,topic_list: Vec<String>) -> Self {
+        let redis_conn = redis_conn.clone();
         let order_book = Arc::new(Mutex::new(OrderBooks::new("BinanceFutures".to_string())));
         let config = ConnectorConfig::default();
         
@@ -104,6 +110,7 @@ impl BinanceFuturesWebSocketConnector {
         let (tx, _rx) = mpsc::channel::<OrderBooks>(1);
         
         let connector = BinanceFuturesWebSocketConnector { 
+            redis_conn,
             topic_list: topic_list.clone(),
             order_book: order_book.clone(),
             tx,
@@ -201,12 +208,45 @@ impl BinanceFuturesWebSocketConnector {
             let server_ts = Utils::get_current_timestamp_ms() as i64;
             let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
             let latency = server_ts - event_ts;
-            debug!("Latency: {} ms", latency);
+            //debug!("Latency: {} ms", latency);
 
             let bid_order = Self::parse_order(&json_data, "b", "B")?;
             let ask_order = Self::parse_order(&json_data, "a", "A")?;
             println!("Symbol: {}, Bid: {}, Ask: {} | BSize {} , ASize {} @ {} | Latency {}", json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price,bid_order.quantity , ask_order.quantity,Utils::get_current_time()
             ,latency);
+            let topic = format!("Binance_ticker:{}",  json_data["s"].as_str().unwrap_or("Unknown"));
+            // Store data in Redis in hashmap
+            
+            let mut obj = HashMap::new();
+            obj.insert("bid",json_data["b"].as_str().unwrap_or("0"));
+            obj.insert("ask",json_data["a"].as_str().unwrap_or("0"));
+            obj.insert("bid_size",json_data["B"].as_str().unwrap_or("0"));
+            obj.insert("ask_size",json_data["A"].as_str().unwrap_or("0"));
+            obj.insert("timestamp",json_data["E"].as_str().unwrap_or("0"));
+
+            /* 
+            match self.redis_conn.hset_multiple(&topic,obj).await {
+                Ok(_) => {},
+                Err(e) => {
+                    error!("Failed to set data in Redis: {}", e);
+                }
+                
+            } */
+
+            let mut connection = self.redis_conn.get_async_connection().await?;
+    
+            let mut pipe = redis::pipe();
+            for (field, value) in obj {
+                pipe.hset(topic, field, value);
+            }
+
+            match pipe.query_async(&mut connection).await {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    error!("Failed to set data in Redis: {}", e);
+                    Err(e)
+                }
+            }
             let mut order_book = self.order_book.lock().await;
 
             if let Some(orderbook) = order_book.get_orderbook_mut(json_data["s"].as_str().unwrap()) {

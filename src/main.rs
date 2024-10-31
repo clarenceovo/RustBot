@@ -11,7 +11,9 @@ use Bolt_Hedger::bolt_hedger::BoltHedger;
 use model::{okx_order::OkxOrder, okx_order_message::OrderFillData};
 use tokio::sync::mpsc;
 use serde_json::Value;
+use std::sync::Arc;
 use log::{info, error};
+use transport::redis::RedisClient;
 use model::orderbook::OrderBooks;
 use tokio::time::{sleep, Duration};
 use connector::okx_trade_client::OkxTradeClient;
@@ -36,18 +38,30 @@ async fn read_config(file_path: &str) -> Result<Value, Box<dyn Error + Send + Sy
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Initialize logging
     let credential_config = read_config("config/credential.json").await.unwrap();
+    let redis_config = read_config("config/redis.json").await.unwrap();
+    let redis_client = Arc::new(RedisClient::new(
+        redis_config["host"].as_str().unwrap(),
+        redis_config["port"].as_u64().unwrap() as u16,
+        redis_config["password"].as_str()
+    ).await?);
+    /* 
+    match redis_client.set("rust", "test_value").await {
+        Ok(_) => println!("SET operation successful"),
+        Err(e) => println!("SET operation failed: {}", e)
+    } */
 
     let (okx_tx, okx_rx) = mpsc::channel::<OrderBooks>(1000);
     let (binance_tx, binance_rx) = mpsc::channel::<OrderBooks>(1000);
     let (okx_trade_tx, okx_trade_rx) = mpsc::channel::<OkxOrder>(1000);
     let (okx_fill_tx, okx_fill_rx) = mpsc::channel::<OrderFillData>(1000);
-    let pairs = vec!["BTC-USDT-SWAP".to_string()];
-    let mut okx_connector = OkxMarketDataWebSocketConnector::new(pairs.clone());
+    let pairs = vec!["BTC-USDT-SWAP".to_string(),"BTC-USDC-SWAP".to_string(),"ETH-USDT-SWAP".to_string(),"ETH-USDC-SWAP".to_string(),"SUI-USDT-SWAP".to_string()];
+    let mut okx_connector = OkxMarketDataWebSocketConnector::new(&redis_client,pairs.clone());
 
     okx_connector.set_sender(okx_tx);
 
-    let symbols = vec!["btcusdt".to_string()];
-    let binance_connector = BinanceFuturesWebSocketConnector::new(symbols.clone());
+    let symbols = vec!["btcusdt".to_string(),"ethusdt".to_string(),"suiusdt".to_string(),"solusdt".to_string()];
+    
+    let binance_connector = BinanceFuturesWebSocketConnector::new(&redis_client,symbols.clone());
 
     // Start the connector tasks
     let okx_task = tokio::spawn(async move {
@@ -56,16 +70,29 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             error!("Error in OKX connector: {:?}", e);
         }
     });
-
+    
     let binance_task = tokio::spawn(async move {
         info!("Connecting to Binance Futures WebSocket...");
         if let Err(e) = binance_connector.connect_and_subscribe().await {
             error!("Error in Binance connector: {:?}", e);
         }
     });
+    
 
 
     /*
+
+    let okx_ping = tokio::spawn(async move {
+        loop {
+            sleep(Duration::from_secs(30)).await;
+            info!("Sending ping to OKX WebSocket...");
+            if let Err(e) = okx_connector.send_ping().await {
+                error!("Error sending ping to OKX WebSocket: {:?}", e);
+            }
+        }
+    });
+
+
     let okx_trade_task = tokio::spawn(async move {
         info!("Connecting to OKX Trade WebSocket...");
         let okx_trade_client = match OkxTradeClient::new(
@@ -104,15 +131,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     */
 
     // Wait for all tasks to complete
-    let (okx_result, binance_result) = tokio::join!(okx_task, binance_task);
+    let (okx_result,binance_result) = tokio::join!(okx_task,binance_task);
 
     // Handle results
-    if let Err(e) = okx_result {
-        error!("OKX task error: {:?}", e);
-    }
-    if let Err(e) = binance_result {
-        error!("Binance task error: {:?}", e);
-    }
 
 
     Ok(())

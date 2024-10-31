@@ -14,12 +14,14 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
+use crate::transport::redis::RedisClient;
 
 const OKX_WS_URL: &str = "wss://ws.okx.com:8443/ws/v5/public";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
 pub struct OkxMarketDataWebSocketConnector {
+    redis_conn: Arc<RedisClient>,
     topic_list: Vec<String>,
     order_book: Arc<Mutex<OrderBooks>>,
     tx: Sender<OrderBooks>,
@@ -96,7 +98,8 @@ impl From<std::num::ParseFloatError> for WebSocketError {
 }
 
 impl OkxMarketDataWebSocketConnector {
-    pub fn new(topic_list: Vec<String>) -> Self {
+    pub fn new(redis_conn: &Arc<RedisClient> ,topic_list: Vec<String>) -> Self {
+        let redis_conn = redis_conn.clone();
         let order_book = Arc::new(Mutex::new(OrderBooks::new("OKX".to_string())));
         let config = ConnectorConfig::default();
         
@@ -104,6 +107,7 @@ impl OkxMarketDataWebSocketConnector {
         let (tx, _rx) = mpsc::channel::<OrderBooks>(1000);
         
         let connector = OkxMarketDataWebSocketConnector { 
+            redis_conn,
             topic_list: topic_list.clone(),
             order_book: order_book.clone(),
             tx,
@@ -141,6 +145,12 @@ impl OkxMarketDataWebSocketConnector {
                 }
             }
         }
+    }
+
+    async fn send_ping(&self) -> Result<(), WebSocketError> {
+
+
+        Ok(())
     }
 
     async fn attempt_connection(&self) -> Result<(), WebSocketError> {
@@ -208,7 +218,19 @@ impl OkxMarketDataWebSocketConnector {
             debug!("Latency: {} ms", latency);
     
             let ticker = &json_data["data"][0];
-            println!("Received ticker: {}", ticker.to_string());
+            //println!("Received ticker: {}", ticker.to_string());
+            //concat "okx_ticker" with the instrument id
+            let topic = format!("okx_ticker:{}", ticker["instId"].as_str().unwrap());
+            /* 
+            match  self.redis_conn.hset(&topic, "last",ticker["last"].as_str().unwrap_or_default() ).await{
+                Ok(_) => {},
+                Err(e) => println!("SET operation failed: {}", e)
+            }
+            match  self.redis_conn.hset(&topic, "timestamp",ticker["ts"].as_str().unwrap_or_default() ).await{
+                Ok(_) => {},
+                Err(e) => println!("SET operation failed: {}", e)
+            }
+            */
             let bid_order = Self::parse_order(ticker, "bidPx", "bidSz")?;
             let ask_order = Self::parse_order(ticker, "askPx", "askSz")?;
     
