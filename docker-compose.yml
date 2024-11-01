@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  rust-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rust-bot
+    restart: always
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    environment:
+      - RUST_LOG=info
+      # Add your environment variables here
+      # - BOT_TOKEN=your_token
+      # - DATABASE_URL=your_db_url

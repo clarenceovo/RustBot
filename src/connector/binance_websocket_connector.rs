@@ -220,7 +220,7 @@ impl BinanceFuturesWebSocketConnector {
 
   
             let mut last_ts = self.timestamp_record.get(json_data["s"].as_str().unwrap_or("Unknown")).unwrap_or(&0);
-            if (last_ts - server_ts).abs() > 500 || *last_ts == 0 {
+            if (last_ts - server_ts).abs() > 1000 || *last_ts == 0 {
                 self.timestamp_record.insert(json_data["s"].as_str().unwrap_or("Unknown").to_string(),server_ts);
                 let topic = format!("Binance_ticker:{}",  json_data["s"].as_str().unwrap_or("Unknown"));
                 // Store data in Redis in hashmap
