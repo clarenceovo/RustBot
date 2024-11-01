@@ -16,6 +16,12 @@ RUN cargo build --release
 # Use a minimal image for the final stage
 FROM debian:buster-slim
 
+# Install necessary dependencies
+RUN apt-get update && apt-get install -y \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the compiled binary from the builder stage
 COPY --from=builder /usr/src/RustBot/target/release/RustBot /usr/local/bin/RustBot
 
