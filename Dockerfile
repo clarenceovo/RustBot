@@ -1,8 +1,9 @@
-# Use the official Rust image as the base image
-FROM rust:latest AS builder
+# Stage 1: Build the application
+FROM rust:latest as builder
 
-# Set the working directory inside the container
-WORKDIR /usr/src/RustBot
+# Create a new empty shell project
+RUN USER=root cargo new --bin rustbot
+WORKDIR /rustbot
 
 # Copy the Cargo.toml and Cargo.lock files
 COPY Cargo.toml Cargo.lock ./
@@ -10,20 +11,14 @@ COPY Cargo.toml Cargo.lock ./
 # Copy the source code
 COPY src ./src
 
-# Build the application
+# Build the project
 RUN cargo build --release
 
-# Use a minimal image for the final stage
+# Stage 2: Create a minimal image to run the application
 FROM debian:buster-slim
 
-# Install necessary dependencies
-RUN apt-get update && apt-get install -y \
-    libssl-dev \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Copy the build artifact from the builder stage
+COPY --from=builder /rustbot/target/release/rustbot /usr/local/bin/rustbot
 
-# Copy the compiled binary from the builder stage
-COPY --from=builder /usr/src/RustBot/target/release/RustBot /usr/local/bin/RustBot
-
-# Set the entrypoint command to run the application
-ENTRYPOINT ["/usr/local/bin/RustBot"]
+# Set the startup command to run the binary
+CMD ["rustbot"]
