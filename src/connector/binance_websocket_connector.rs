@@ -234,7 +234,7 @@ impl BinanceFuturesWebSocketConnector {
     
                 
                 match self.redis_conn.hset_multiple(&topic,obj).await {
-                    Ok(_) => {println!("SET operation successful for {}",topic);},
+                    Ok(_) => {println!("SET operation successful for {} | Latency :{}",topic, latency);},
                     Err(e) => {
                         error!("Failed to set data in Redis: {}", e);
                     }
