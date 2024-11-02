@@ -157,13 +157,21 @@ impl BinanceFuturesWebSocketConnector {
         let (mut write, mut read) = ws_stream.split();
 
         // Subscribe to ticker channels
+        
+        
+        let liquidation_message = json!({
+            "method": "SUBSCRIBE",
+            "params": ["!forceOrder@arr"],
+            "id": 1
+        });
+        
         let subscribe_message = json!({
             "method": "SUBSCRIBE",
             "params": self.topic_list.iter().map(|symbol| format!("{}@bookTicker", symbol.to_lowercase())).collect::<Vec<String>>(),
             "id": 1
         });
         write.send(Message::Text(subscribe_message.to_string())).await?;
-
+        write.send(Message::Text(liquidation_message.to_string())).await?;
         loop {
             match timeout(self.config.timeout_duration, read.next()).await {
                 Ok(Some(message)) => {
@@ -206,7 +214,9 @@ impl BinanceFuturesWebSocketConnector {
     
     async fn process_text_message(&mut self, text: &str) -> Result<(), WebSocketError> {
         let json_data: Value = serde_json::from_str(text)?;
+        
         if json_data["e"].as_str() == Some("bookTicker") {
+
             let mut last_ts = self.timestamp_record.get(json_data["s"].as_str().unwrap_or("Unknown")).unwrap_or(&0);
             let server_ts = Utils::get_current_timestamp_ms() as i64;
             if (last_ts - server_ts).abs() > 1000 || *last_ts == 0 {
@@ -219,9 +229,6 @@ impl BinanceFuturesWebSocketConnector {
                 //println!("Symbol: {}, Bid: {}, Ask: {} | BSize {} , ASize {} @ {} | Latency {}",
                 //        json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price,bid_order.quantity , ask_order.quantity,Utils::get_current_time()
                 //,latency);
-
-  
-                print!("Timestamp: {} | ",Utils::get_current_time());
             
                 self.timestamp_record.insert(json_data["s"].as_str().unwrap_or("Unknown").to_string(),server_ts);
                 let topic = format!("Binance_ticker:{}",  json_data["s"].as_str().unwrap_or("Unknown"));
@@ -237,7 +244,7 @@ impl BinanceFuturesWebSocketConnector {
     
                 
                 match self.redis_conn.hset_multiple(&topic,obj).await {
-                    Ok(_) => {println!("SET operation successful for {} | Latency :{}",topic, latency);},
+                    Ok(_) => {},
                     Err(e) => {
                         error!("Failed to set data in Redis: {}", e);
                     }
@@ -264,6 +271,28 @@ impl BinanceFuturesWebSocketConnector {
                 return Ok(());
             }
 
+        }else if json_data["e"].as_str() == Some("forceOrder") {
+            println!("Force Order: {}",json_data);
+            let mut obj = HashMap::<&str,&str>::new();
+            let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
+            let detail = json_data["o"].as_object().unwrap();
+            obj.insert("time", detail["T"].as_str().unwrap_or("0"));
+            obj.insert("symbol", detail["s"].as_str().unwrap_or("Unknown"));
+
+            obj.insert("side", detail["S"].as_str().unwrap_or("Unknown"));
+            obj.insert("price", detail["p"].as_str().unwrap_or("0"));
+            obj.insert("quantity", detail["q"].as_str().unwrap_or("0"));
+
+            let topic = format!("Binance_Liquidation:{}",  detail["s"].as_str().unwrap_or("Unknown"));
+            match self.redis_conn.hset_multiple(&topic,obj).await {
+                Ok(_) => {},
+                Err(e) => {
+                    error!("Failed to set data in Redis: {}", e);
+                }
+                
+            }
+
+        
         }
         Ok(())
     }
