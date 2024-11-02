@@ -1,24 +1,11 @@
-# Stage 1: Build the application
-FROM rust:latest as builder
+# 1. This tells docker to use the Rust official image
+FROM rust:1.70
 
-# Create a new empty shell project
-RUN USER=root cargo new --bin rustbot
-WORKDIR /rustbot
+# 2. Copy the files in your machine to the Docker image
+COPY ./ ./
 
-# Copy the Cargo.toml and Cargo.lock files
-COPY Cargo.toml Cargo.lock ./
-
-# Copy the source code
-COPY src ./src
-
-# Build the project
+# Build your program for release
 RUN cargo build --release
 
-# Stage 2: Create a minimal image to run the application
-FROM debian:buster-slim
-
-# Copy the build artifact from the builder stage
-COPY --from=builder /rustbot/target/release/rustbot /usr/local/bin/rustbot
-
-# Set the startup command to run the binary
-CMD ["rustbot"]
+# Run the binary
+CMD ["./target/release/RustBot"]
