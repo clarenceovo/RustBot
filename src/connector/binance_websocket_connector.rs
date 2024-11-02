@@ -1,3 +1,4 @@
+use core::time;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::{timeout, sleep};
@@ -180,7 +181,8 @@ impl BinanceFuturesWebSocketConnector {
                     match message? {
                         Message::Text(text) => {
                             if let Err(e) = self.process_text_message(&text).await {
-                                error!("Error processing text message: {}", e);
+                                error!("Error:{}", text);
+
                             }
                         },
                         Message::Binary(binary) => {
@@ -228,7 +230,7 @@ impl BinanceFuturesWebSocketConnector {
 
                 let bid_order = Self::parse_order(&json_data, "b", "B")?;
                 let ask_order = Self::parse_order(&json_data, "a", "A")?;
-                //println!("Symbol: {}, Bid: {}, Ask: {} | BSize {} , ASize {} @ {} | Latency {}",
+                //info!("Symbol: {}, Bid: {}, Ask: {} | BSize {} , ASize {} @ {} | Latency {}",
                 //        json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price,bid_order.quantity , ask_order.quantity,Utils::get_current_time()
                 //,latency);
             
@@ -260,11 +262,14 @@ impl BinanceFuturesWebSocketConnector {
                     let updated_order_books = (*order_book).clone();
     
                     drop(order_book);
+
+                    /*
         
                     if let Err(e) = self.tx.send(updated_order_books).await {
                         error!("Failed to send updated OrderBooks: {}", e);
                         return Err(WebSocketError::SendError(e.to_string()));
                     }
+                    */
                 } else {
                     error!("Orderbook not found for instrument: {}", json_data["s"].as_str().unwrap());
                     return Err(WebSocketError::OrderBookError("Orderbook not found".to_string()));
@@ -274,12 +279,12 @@ impl BinanceFuturesWebSocketConnector {
             }
 
         }else if json_data["e"].as_str() == Some("forceOrder") {
-            println!("Force Order: {}",json_data);
+            info!("Force Order: {}",json_data);
             let mut obj = HashMap::<&str,&str>::new();
             let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
             let detail = json_data["o"].as_object().unwrap();
-            let time_as_i64 = detail["T"].as_i64().unwrap();
-            let time_as_string = time_as_i64.to_string();
+            let time_as_i64 = json_data["o"]["T"].as_i64();
+            let time_as_string = time_as_i64.unwrap_or(0).to_string();
             obj.insert("time", time_as_string.as_str());
             obj.insert("symbol", detail["s"].as_str().unwrap_or("Unknown"));
 

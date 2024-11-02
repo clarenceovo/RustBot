@@ -12,10 +12,11 @@ use model::{okx_order::OkxOrder, okx_order_message::OrderFillData};
 use tokio::sync::mpsc;
 use serde_json::Value;
 use std::sync::Arc;
-use log::{info, error};
 use transport::redis::RedisClient;
 use model::orderbook::OrderBooks;
 use tokio::time::{sleep, Duration};
+use log::{info, LevelFilter,error};
+use env_logger::Env;
 use connector::okx_trade_client::OkxTradeClient;
 use util::time_util::Utils;
 async fn read_config(file_path: &str) -> Result<Value, Box<dyn Error + Send + Sync>> {
@@ -36,6 +37,10 @@ async fn read_config(file_path: &str) -> Result<Value, Box<dyn Error + Send + Sy
 }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+    .format_timestamp_secs()
+    .init();
+
     // Initialize logging
     let credential_config = read_config("config/credential.json").await.unwrap();
     let redis_config = read_config("config/redis.json").await.unwrap();
