@@ -17,6 +17,8 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use crate::transport::redis::RedisClient;
 use redis::AsyncCommands;
+use crate::model::liquidation_level::{LiquidationLevel, Level, Side};
+
 
 
 const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
@@ -276,7 +278,9 @@ impl BinanceFuturesWebSocketConnector {
             let mut obj = HashMap::<&str,&str>::new();
             let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
             let detail = json_data["o"].as_object().unwrap();
-            obj.insert("time", detail["T"].as_str().unwrap_or("0"));
+            let time_as_i64 = detail["T"].as_i64().unwrap();
+            let time_as_string = time_as_i64.to_string();
+            obj.insert("time", time_as_string.as_str());
             obj.insert("symbol", detail["s"].as_str().unwrap_or("Unknown"));
 
             obj.insert("side", detail["S"].as_str().unwrap_or("Unknown"));

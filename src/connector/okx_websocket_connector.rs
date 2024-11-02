@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use crate::transport::redis::RedisClient;
+use crate::model::liquidation_level;
 
 const OKX_WS_URL: &str = "wss://ws.okx.com:8443/ws/v5/public";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
