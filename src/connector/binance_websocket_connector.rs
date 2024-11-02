@@ -254,6 +254,8 @@ impl BinanceFuturesWebSocketConnector {
                     }
                     
                 }
+
+                /* 
                 let mut order_book = self.order_book.lock().await;
 
                 if let Some(orderbook) = order_book.get_orderbook_mut(json_data["s"].as_str().unwrap()) {
@@ -274,6 +276,8 @@ impl BinanceFuturesWebSocketConnector {
                     error!("Orderbook not found for instrument: {}", json_data["s"].as_str().unwrap());
                     return Err(WebSocketError::OrderBookError("Orderbook not found".to_string()));
                 } 
+
+                */
             }else {
                 return Ok(());
             }
