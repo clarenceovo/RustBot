@@ -207,20 +207,22 @@ impl BinanceFuturesWebSocketConnector {
     async fn process_text_message(&mut self, text: &str) -> Result<(), WebSocketError> {
         let json_data: Value = serde_json::from_str(text)?;
         if json_data["e"].as_str() == Some("bookTicker") {
+            let mut last_ts = self.timestamp_record.get(json_data["s"].as_str().unwrap_or("Unknown")).unwrap_or(&0);
             let server_ts = Utils::get_current_timestamp_ms() as i64;
-            let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
-            let latency = server_ts - event_ts;
-            //debug!("Latency: {} ms", latency);
+            if (last_ts - server_ts).abs() > 1000 || *last_ts == 0 {
+                let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
+                let latency = server_ts - event_ts;
+                //debug!("Latency: {} ms", latency);
 
-            let bid_order = Self::parse_order(&json_data, "b", "B")?;
-            let ask_order = Self::parse_order(&json_data, "a", "A")?;
-            //println!("Symbol: {}, Bid: {}, Ask: {} | BSize {} , ASize {} @ {} | Latency {}",
-            //        json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price,bid_order.quantity , ask_order.quantity,Utils::get_current_time()
-            //,latency);
+                let bid_order = Self::parse_order(&json_data, "b", "B")?;
+                let ask_order = Self::parse_order(&json_data, "a", "A")?;
+                //println!("Symbol: {}, Bid: {}, Ask: {} | BSize {} , ASize {} @ {} | Latency {}",
+                //        json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price,bid_order.quantity , ask_order.quantity,Utils::get_current_time()
+                //,latency);
 
   
-            let mut last_ts = self.timestamp_record.get(json_data["s"].as_str().unwrap_or("Unknown")).unwrap_or(&0);
-            if (last_ts - server_ts).abs() > 1000 || *last_ts == 0 {
+                print!("Timestamp: {} | ",Utils::get_current_time());
+            
                 self.timestamp_record.insert(json_data["s"].as_str().unwrap_or("Unknown").to_string(),server_ts);
                 let topic = format!("Binance_ticker:{}",  json_data["s"].as_str().unwrap_or("Unknown"));
                 // Store data in Redis in hashmap
@@ -230,7 +232,8 @@ impl BinanceFuturesWebSocketConnector {
                 obj.insert("ask",json_data["a"].as_str().unwrap_or("0"));
                 obj.insert("bid_size",json_data["B"].as_str().unwrap_or("0"));
                 obj.insert("ask_size",json_data["A"].as_str().unwrap_or("0"));
-                obj.insert("timestamp",json_data["E"].as_str().unwrap_or("0"));
+                let timestamp_str = server_ts.to_string();
+                obj.insert("timestamp", &timestamp_str);
     
                 
                 match self.redis_conn.hset_multiple(&topic,obj).await {
@@ -239,27 +242,28 @@ impl BinanceFuturesWebSocketConnector {
                         error!("Failed to set data in Redis: {}", e);
                     }
                     
-                } 
-            }
-
-
-            let mut order_book = self.order_book.lock().await;
-
-            if let Some(orderbook) = order_book.get_orderbook_mut(json_data["s"].as_str().unwrap()) {
-                orderbook.set_bids_on_snapshot(vec![bid_order]);
-                orderbook.set_asks_on_snapshot(vec![ask_order]);
-                let updated_order_books = (*order_book).clone();
-
-                drop(order_book);
-    
-                if let Err(e) = self.tx.send(updated_order_books).await {
-                    error!("Failed to send updated OrderBooks: {}", e);
-                    return Err(WebSocketError::SendError(e.to_string()));
                 }
-            } else {
-                error!("Orderbook not found for instrument: {}", json_data["s"].as_str().unwrap());
-                return Err(WebSocketError::OrderBookError("Orderbook not found".to_string()));
+                let mut order_book = self.order_book.lock().await;
+
+                if let Some(orderbook) = order_book.get_orderbook_mut(json_data["s"].as_str().unwrap()) {
+                    orderbook.set_bids_on_snapshot(vec![bid_order]);
+                    orderbook.set_asks_on_snapshot(vec![ask_order]);
+                    let updated_order_books = (*order_book).clone();
+    
+                    drop(order_book);
+        
+                    if let Err(e) = self.tx.send(updated_order_books).await {
+                        error!("Failed to send updated OrderBooks: {}", e);
+                        return Err(WebSocketError::SendError(e.to_string()));
+                    }
+                } else {
+                    error!("Orderbook not found for instrument: {}", json_data["s"].as_str().unwrap());
+                    return Err(WebSocketError::OrderBookError("Orderbook not found".to_string()));
+                } 
+            }else {
+                return Ok(());
             }
+
         }
         Ok(())
     }
