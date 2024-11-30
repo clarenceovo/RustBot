@@ -81,4 +81,8 @@ impl RedisClient {
 
         pipe.query_async(&mut *conn).await
     }
+    pub async fn lrange(&self, key: &str) -> RedisResult<Vec<String>> {
+        let mut conn = self.connection.lock().await;
+        conn.lrange(key, 0, -1).await
+    }
 }

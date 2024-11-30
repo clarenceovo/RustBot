@@ -15,7 +15,7 @@ use std::sync::Arc;
 use transport::redis::RedisClient;
 use model::orderbook::OrderBooks;
 use tokio::time::{sleep, Duration};
-use log::{info, LevelFilter,error};
+use log::{info, LevelFilter, error, log};
 use env_logger::Env;
 use connector::okx_trade_client::OkxTradeClient;
 use util::time_util::Utils;
@@ -59,13 +59,26 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let (binance_tx, binance_rx) = mpsc::channel::<OrderBooks>(1000);
     let (okx_trade_tx, okx_trade_rx) = mpsc::channel::<OkxOrder>(1000);
     let (okx_fill_tx, okx_fill_rx) = mpsc::channel::<OrderFillData>(1000);
-    let pairs = vec!["BTC-USDT-SWAP".to_string(),"BTC-USDC-SWAP".to_string(),"ETH-USDT-SWAP".to_string(),"ETH-USDC-SWAP".to_string(),"SUI-USDT-SWAP".to_string()];
+    let pairs = vec!["BTC-USDT-SWAP".to_string(),"BTC-USDC-SWAP".to_string()];
     let mut okx_connector = OkxMarketDataWebSocketConnector::new(&redis_client,pairs.clone());
 
     okx_connector.set_sender(okx_tx);
 
-    let symbols = vec!["btcusdt".to_string(),"ethusdt".to_string(),"suiusdt".to_string(),"solusdt".to_string(),"aaveusdt".to_string(),"bnbusdt".to_string(),"dogeusdt".to_string(),"adausdt".to_string(),"linkusdt".to_string(),"ltcusdt".to_string(),"xrpusdt".to_string(),"dotusdt".to_string(),"uniusdt".to_string(),"maticusdt".to_string(),"ethusdt".to_string(),"suiusdt".to_string()];
-    
+    let ticker_list = redis_client.lrange("MktData:Binance:TickerList").await;
+    let ticker_list: Vec<String> = match ticker_list {
+        Ok(ticker_list) => ticker_list,
+        Err(e) => {
+            error!("Failed to get ticker list from Redis: {:?}", e);
+            return Err(Box::new(e) as Box<dyn Error + Send + Sync>);
+        }
+    };
+
+    //ticker_list to symbol list
+    let mut symbols = Vec::new();
+    for ticker in ticker_list {
+        symbols.push(format!("{}",ticker.to_lowercase()));
+    }
+    info!("Symbols: {:?}", symbols);
     let mut binance_connector = BinanceFuturesWebSocketConnector::new(&redis_client,symbols.clone());
 
     // Start the connector tasks

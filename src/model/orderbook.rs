@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 use crc32fast::Hasher;
 use std::collections::HashMap;
+use log::info;
+
 #[derive(Debug, Clone)]
 pub struct OrderBookLevel {
     pub price: f64,
@@ -64,7 +66,7 @@ impl OrderBooks {
         }
     }
     pub fn register_orderbook(&mut self, inst_id: &str) {
-        println!("Book:{} . Registering orderbook for {}",self.exchange_name,inst_id);
+        info!("Book:{} . Registering orderbook for {}",self.exchange_name,inst_id);
         self.order_books.insert(inst_id.to_string(), OrderBook::new(inst_id.to_string()));
     }
 
