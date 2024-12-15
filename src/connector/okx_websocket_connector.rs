@@ -167,19 +167,23 @@ impl OkxMarketDataWebSocketConnector {
         }
 
         loop {
+            if {
+                let mut last_ping = self.last_ping.lock().await;
+                if *last_ping + 3000 < Utils::get_current_timestamp_ms() {
+                    *last_ping = Utils::get_current_timestamp_ms();
+                    true
+                } else {
+                    false
+                }
+            } {
+                let ping_message = json!({
+                    "op": "ping"
+                });
+                write.send(Message::Text(ping_message.to_string())).await?;
+            }
             match timeout(self.config.timeout_duration, read.next()).await {
                 Ok(Some(message)) => {
-                    if {
-                        let mut last_ping = self.last_ping.lock().await;
-                        if *last_ping + 5000 < Utils::get_current_timestamp_ms() {
-                            *last_ping = Utils::get_current_timestamp_ms();
-                            true
-                        } else {
-                            false
-                        }
-                    } {
-                        write.send(Message::Text("ping".to_string())).await?;
-                    }
+
 
                     match message? {
                         Message::Text(text) => {
@@ -220,6 +224,7 @@ impl OkxMarketDataWebSocketConnector {
 
     async fn process_text_message(&self, text: &str) -> Result<(), WebSocketError> {
         //ignore pong
+        println!("Received message: {}", text);
         if text == "pong" {
             info!("Received pong");
             return Ok(());
