@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let (binance_tx, binance_rx) = mpsc::channel::<OrderBooks>(1000);
     let (okx_trade_tx, okx_trade_rx) = mpsc::channel::<OkxOrder>(1000);
     let (okx_fill_tx, okx_fill_rx) = mpsc::channel::<OrderFillData>(1000);
-    let pairs = vec!["BTC-USDT-SWAP".to_string(), "BTC-USDC-SWAP".to_string()];
+    let pairs = vec!["BTC-USDT-SWAP".to_string(), "BTC-USDC-SWAP".to_string(),"ETH-USDT-SWAP".to_string(), "ETH-USDC-SWAP".to_string(), "ETH-BTC-SWAP".to_string(),"BTC-USDT".to_string()];
     let mut okx_connector = OkxMarketDataWebSocketConnector::new(&redis_client, pairs.clone());
 
     okx_connector.set_sender(okx_tx);

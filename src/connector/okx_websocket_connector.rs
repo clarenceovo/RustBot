@@ -17,7 +17,7 @@ use tokio::sync::mpsc::Sender;
 use crate::transport::redis::RedisClient;
 use crate::model::liquidation_level;
 
-const OKX_WS_URL: &str = "wss://ws.okx.com:8443/ws/v5/public";
+const OKX_WS_URL: &str = "wss://wsaws.okx.com:8443/ws/v5/public";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
@@ -169,16 +169,14 @@ impl OkxMarketDataWebSocketConnector {
         loop {
             if {
                 let mut last_ping = self.last_ping.lock().await;
-                if *last_ping + 3000 < Utils::get_current_timestamp_ms() {
+                if *last_ping + 25000 < Utils::get_current_timestamp_ms() {
                     *last_ping = Utils::get_current_timestamp_ms();
                     true
                 } else {
                     false
                 }
             } {
-                let ping_message = json!({
-                    "op": "ping"
-                });
+                let ping_message = "ping";
                 write.send(Message::Text(ping_message.to_string())).await?;
             }
             match timeout(self.config.timeout_duration, read.next()).await {
