@@ -21,7 +21,6 @@ use redis::AsyncCommands;
 use crate::model::liquidation_level::{LiquidationLevel, Level, Side};
 
 
-
 const BINANCE_FUTURES_WS_URL: &str = "wss://fstream.binance.com/ws";
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 const RECONNECT_DELAY: Duration = Duration::from_secs(5);
@@ -32,7 +31,7 @@ pub struct BinanceFuturesWebSocketConnector {
     order_book: Arc<Mutex<OrderBooks>>,
     tx: Sender<OrderBooks>,
     config: ConnectorConfig,
-    timestamp_record :HashMap<String,i64>,
+    timestamp_record: HashMap<String, i64>,
 }
 
 pub struct ConnectorConfig {
@@ -46,7 +45,7 @@ impl Default for ConnectorConfig {
         ConnectorConfig {
             reconnect_attempts: MAX_RECONNECT_ATTEMPTS,
             reconnect_delay: RECONNECT_DELAY,
-            timeout_duration: Duration::from_secs(10),
+            timeout_duration: Duration::from_secs(5),
         }
     }
 }
@@ -105,15 +104,15 @@ impl From<std::num::ParseFloatError> for WebSocketError {
 }
 
 impl BinanceFuturesWebSocketConnector {
-    pub fn new(redis_conn:&Arc<RedisClient>,topic_list: Vec<String>) -> Self {
+    pub fn new(redis_conn: &Arc<RedisClient>, topic_list: Vec<String>) -> Self {
         let redis_conn = redis_conn.clone();
         let order_book = Arc::new(Mutex::new(OrderBooks::new("BinanceFutures".to_string())));
         let config = ConnectorConfig::default();
-        let mut timestamp_record :HashMap<String,i64> = HashMap::new();
+        let mut timestamp_record: HashMap<String, i64> = HashMap::new();
         // Dummy channel
         let (tx, _rx) = mpsc::channel::<OrderBooks>(1);
-        
-        let connector = BinanceFuturesWebSocketConnector { 
+
+        let connector = BinanceFuturesWebSocketConnector {
             redis_conn,
             topic_list: topic_list.clone(),
             order_book: order_book.clone(),
@@ -121,14 +120,14 @@ impl BinanceFuturesWebSocketConnector {
             config,
             timestamp_record,
         };
-        
+
         tokio::spawn(async move {
             let mut order_book = order_book.lock().await;
             for topic in topic_list.iter() {
                 order_book.register_orderbook(topic.to_uppercase().as_str());
             }
         });
-    
+
         connector
     }
 
@@ -160,14 +159,14 @@ impl BinanceFuturesWebSocketConnector {
         let (mut write, mut read) = ws_stream.split();
 
         // Subscribe to ticker channels
-        
-        
+
+
         let liquidation_message = json!({
             "method": "SUBSCRIBE",
             "params": ["!forceOrder@arr"],
             "id": 1
         });
-        
+
         /* 
         let subscribe_message = json!({
             "method": "SUBSCRIBE",
@@ -190,32 +189,31 @@ impl BinanceFuturesWebSocketConnector {
                         Message::Text(text) => {
                             if let Err(e) = self.process_text_message(&text).await {
                                 error!("Error:{}", text);
-
                             }
-                        },
+                        }
                         Message::Binary(binary) => {
                             debug!("Received binary message: {:?}", binary);
-                        },
+                        }
                         Message::Ping(ping) => {
                             debug!("Received ping message: {:?}", ping);
                             write.send(Message::Pong(ping)).await?;
-                        },
+                        }
                         Message::Pong(pong) => {
                             debug!("Received pong message: {:?}", pong);
-                        },
+                        }
                         Message::Frame(frame) => {
                             debug!("Received frame message: {:?}", frame);
-                        },
+                        }
                         Message::Close(close) => {
                             info!("Connection closed: {:?}", close);
                             return Ok(());
-                        },
+                        }
                     }
-                },
+                }
                 Ok(None) => {
                     info!("WebSocket stream ended");
                     return Ok(());
-                },
+                }
                 Err(_) => {
                     error!("WebSocket timeout error");
                     return Err(WebSocketError::Timeout);
@@ -223,12 +221,11 @@ impl BinanceFuturesWebSocketConnector {
             }
         }
     }
-    
+
     async fn process_text_message(&mut self, text: &str) -> Result<(), WebSocketError> {
         let json_data: Value = serde_json::from_str(text)?;
-        
-        if json_data["e"].as_str() == Some("bookTicker") {
 
+        if json_data["e"].as_str() == Some("bookTicker") {
             let mut last_ts = self.timestamp_record.get(json_data["s"].as_str().unwrap_or("Unknown")).unwrap_or(&0);
             let server_ts = Utils::get_current_timestamp_ms() as i64;
             if (last_ts - server_ts).abs() > 500 || *last_ts == 0 {
@@ -238,30 +235,32 @@ impl BinanceFuturesWebSocketConnector {
 
                 let bid_order = Self::parse_order(&json_data, "b", "B")?;
                 let ask_order = Self::parse_order(&json_data, "a", "A")?;
+                /*
                 info!("Symbol: {}, Bid: {}, Ask: {} | BSize {} , ASize {} @ {} | Latency {}",
                         json_data["s"].as_str().unwrap_or("Unknown"), bid_order.price, ask_order.price,bid_order.quantity , ask_order.quantity,Utils::get_current_time()
                 ,latency);
-            
-                self.timestamp_record.insert(json_data["s"].as_str().unwrap_or("Unknown").to_string(),server_ts);
-                let topic = format!("Binance_ticker:{}",  json_data["s"].as_str().unwrap_or("Unknown"));
+                */
+                self.timestamp_record.insert(json_data["s"].as_str().unwrap_or("Unknown").to_string(), server_ts);
+                let topic = format!("Binance_ticker:{}", json_data["s"].as_str().unwrap_or("Unknown"));
                 // Store data in Redis in hashmap
-                
+
                 let mut obj = HashMap::new();
-                obj.insert("bid",json_data["b"].as_str().unwrap_or("0"));
-                obj.insert("ask",json_data["a"].as_str().unwrap_or("0"));
-                obj.insert("bid_size",json_data["B"].as_str().unwrap_or("0"));
-                obj.insert("ask_size",json_data["A"].as_str().unwrap_or("0"));
+                obj.insert("bid", json_data["b"].as_str().unwrap_or("0"));
+                obj.insert("ask", json_data["a"].as_str().unwrap_or("0"));
+                obj.insert("bid_size", json_data["B"].as_str().unwrap_or("0"));
+                obj.insert("ask_size", json_data["A"].as_str().unwrap_or("0"));
                 let timestamp_str = server_ts.to_string();
                 obj.insert("timestamp", &timestamp_str);
-    
-                
-                match self.redis_conn.hset_multiple(&topic,obj).await {
-                    Ok(_) => {},
+
+                /*
+                match self.redis_conn.hset_multiple(&topic, obj).await {
+                    Ok(_) => {}
                     Err(e) => {
                         error!("Failed to set data in Redis: {}", e);
                     }
-                    
                 }
+                */
+
 
                 /* 
                 let mut order_book = self.order_book.lock().await;
@@ -286,13 +285,12 @@ impl BinanceFuturesWebSocketConnector {
                 } 
 
                 */
-            }else {
+            } else {
                 return Ok(());
             }
-
-        }else if json_data["e"].as_str() == Some("forceOrder") {
+        } else if json_data["e"].as_str() == Some("forceOrder") {
             info!("Force Order: {}",json_data);
-            let mut obj = HashMap::<&str,&str>::new();
+            let mut obj = HashMap::<&str, &str>::new();
             let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
             let detail = json_data["o"].as_object().unwrap();
             let time_as_i64 = json_data["o"]["T"].as_i64();
@@ -304,16 +302,13 @@ impl BinanceFuturesWebSocketConnector {
             obj.insert("price", detail["p"].as_str().unwrap_or("0"));
             obj.insert("quantity", detail["q"].as_str().unwrap_or("0"));
 
-            let topic = format!("Binance_Liquidation:{}",  detail["s"].as_str().unwrap_or("Unknown"));
-            match self.redis_conn.hset_multiple(&topic,obj).await {
-                Ok(_) => {},
+            let topic = format!("Binance_Liquidation:{}", detail["s"].as_str().unwrap_or("Unknown"));
+            match self.redis_conn.hset_multiple(&topic, obj).await {
+                Ok(_) => {}
                 Err(e) => {
                     error!("Failed to set data in Redis: {}", e);
                 }
-                
             }
-
-        
         } else if json_data["e"].as_str() == Some("aggTrade") {
             /* 
             let mut obj = HashMap::<&str,&str>::new();
@@ -340,7 +335,6 @@ impl BinanceFuturesWebSocketConnector {
                 
             }
             */
-             
         }
         Ok(())
     }
@@ -356,7 +350,7 @@ impl BinanceFuturesWebSocketConnector {
 
         Ok(OrderBookLevel::new(price, amount))
     }
-    
+
     pub fn get_order_book(&self) -> Arc<Mutex<OrderBooks>> {
         Arc::clone(&self.order_book)
     }

@@ -27,6 +27,7 @@ pub struct OkxMarketDataWebSocketConnector {
     order_book: Arc<Mutex<OrderBooks>>,
     tx: Sender<OrderBooks>,
     config: ConnectorConfig,
+    last_ping: Arc<Mutex<u128>>,
 }
 
 pub struct ConnectorConfig {
@@ -40,7 +41,7 @@ impl Default for ConnectorConfig {
         ConnectorConfig {
             reconnect_attempts: MAX_RECONNECT_ATTEMPTS,
             reconnect_delay: RECONNECT_DELAY,
-            timeout_duration: Duration::from_secs(10),
+            timeout_duration: Duration::from_secs(5),
         }
     }
 }
@@ -99,30 +100,29 @@ impl From<std::num::ParseFloatError> for WebSocketError {
 }
 
 impl OkxMarketDataWebSocketConnector {
-    pub fn new(redis_conn: &Arc<RedisClient> ,topic_list: Vec<String>) -> Self {
+    pub fn new(redis_conn: &Arc<RedisClient>, topic_list: Vec<String>) -> Self {
         let redis_conn = redis_conn.clone();
         let order_book = Arc::new(Mutex::new(OrderBooks::new("OKX".to_string())));
         let config = ConnectorConfig::default();
-        
-        // Create a channel that will be used as a placeholder
+        let last_ping = Arc::new(Mutex::new(Utils::get_current_timestamp_ms()));
         let (tx, _rx) = mpsc::channel::<OrderBooks>(1000);
-        
-        let connector = OkxMarketDataWebSocketConnector { 
+
+        let connector = OkxMarketDataWebSocketConnector {
             redis_conn,
             topic_list: topic_list.clone(),
             order_book: order_book.clone(),
             tx,
             config,
+            last_ping
         };
-        
-        // Use tokio::spawn to run the async initialization
+
         tokio::spawn(async move {
             let mut order_book = order_book.lock().await;
             for topic in topic_list.iter() {
                 order_book.register_orderbook(topic);
             }
         });
-    
+
         connector
     }
 
@@ -148,11 +148,6 @@ impl OkxMarketDataWebSocketConnector {
         }
     }
 
-    async fn send_ping(&self) -> Result<(), WebSocketError> {
-
-
-        Ok(())
-    }
 
     async fn attempt_connection(&self) -> Result<(), WebSocketError> {
         let url = Url::parse(OKX_WS_URL)?;
@@ -174,6 +169,18 @@ impl OkxMarketDataWebSocketConnector {
         loop {
             match timeout(self.config.timeout_duration, read.next()).await {
                 Ok(Some(message)) => {
+                    if {
+                        let mut last_ping = self.last_ping.lock().await;
+                        if *last_ping + 5000 < Utils::get_current_timestamp_ms() {
+                            *last_ping = Utils::get_current_timestamp_ms();
+                            true
+                        } else {
+                            false
+                        }
+                    } {
+                        write.send(Message::Text("ping".to_string())).await?;
+                    }
+
                     match message? {
                         Message::Text(text) => {
                             if let Err(e) = self.process_text_message(&text).await {
@@ -184,7 +191,7 @@ impl OkxMarketDataWebSocketConnector {
                             debug!("Received binary message: {:?}", binary);
                         },
                         Message::Ping(ping) => {
-                            debug!("Received ping message: {:?}", ping);
+                            info!("Received ping message: {:?}", ping);
                             write.send(Message::Pong(ping)).await?;
                         },
                         Message::Pong(pong) => {
@@ -210,41 +217,34 @@ impl OkxMarketDataWebSocketConnector {
             }
         }
     }
-    
+
     async fn process_text_message(&self, text: &str) -> Result<(), WebSocketError> {
+        //ignore pong
+        if text == "pong" {
+            info!("Received pong");
+            return Ok(());
+        }
         let json_data: Value = serde_json::from_str(text)?;
         if let Some(ts_difference) = Self::get_ts_difference(&json_data) {
             let server_ts = Utils::get_current_timestamp_ms() as i64;
             let latency = server_ts - ts_difference;
             debug!("Latency: {} ms", latency);
-    
+
+            debug!("Received message: {}", json_data.to_string());
             let ticker = &json_data["data"][0];
-            //println!("Received ticker: {}", ticker.to_string());
-            //concat "okx_ticker" with the instrument id
             let topic = format!("okx_ticker:{}", ticker["instId"].as_str().unwrap());
-            /* 
-            match  self.redis_conn.hset(&topic, "last",ticker["last"].as_str().unwrap_or_default() ).await{
-                Ok(_) => {},
-                Err(e) => println!("SET operation failed: {}", e)
-            }
-            match  self.redis_conn.hset(&topic, "timestamp",ticker["ts"].as_str().unwrap_or_default() ).await{
-                Ok(_) => {},
-                Err(e) => println!("SET operation failed: {}", e)
-            }
-            */
+
             let bid_order = Self::parse_order(ticker, "bidPx", "bidSz")?;
             let ask_order = Self::parse_order(ticker, "askPx", "askSz")?;
-    
+
             let mut order_book = self.order_book.lock().await;
             if let Some(orderbook) = order_book.get_orderbook_mut(ticker["instId"].as_str().unwrap()) {
                 orderbook.set_bids_on_snapshot(vec![bid_order]);
                 orderbook.set_asks_on_snapshot(vec![ask_order]);
-                
 
                 let updated_order_books = (*order_book).clone();
-
                 drop(order_book);
-    
+
                 if let Err(e) = self.tx.send(updated_order_books).await {
                     error!("Failed to send updated OrderBooks: {}", e);
                     return Err(WebSocketError::SendError(e.to_string()));
