@@ -252,14 +252,6 @@ impl BinanceFuturesWebSocketConnector {
                 let timestamp_str = server_ts.to_string();
                 obj.insert("timestamp", &timestamp_str);
 
-                /*
-                match self.redis_conn.hset_multiple(&topic, obj).await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!("Failed to set data in Redis: {}", e);
-                    }
-                }
-                */
 
 
                 /* 
@@ -302,8 +294,9 @@ impl BinanceFuturesWebSocketConnector {
             obj.insert("price", detail["p"].as_str().unwrap_or("0"));
             obj.insert("quantity", detail["q"].as_str().unwrap_or("0"));
 
+            let obj_json = serde_json::to_string(&obj).unwrap();
             let topic = format!("Binance_Liquidation:{}", detail["s"].as_str().unwrap_or("Unknown"));
-            match self.redis_conn.hset_multiple(&topic, obj).await {
+            match self.redis_conn.lpush(&topic, obj_json.as_str()).await {
                 Ok(_) => {}
                 Err(e) => {
                     error!("Failed to set data in Redis: {}", e);

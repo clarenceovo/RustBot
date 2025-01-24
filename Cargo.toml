@@ -2,13 +2,12 @@
 name = "RustBot"
 version = "0.1.0"
 edition = "2021"
-author = ['Clarence']
 
 [dependencies]
-redis = { version = "0.23", features = ["aio", "tokio-comp"] }
+redis = { version = "0.28.2", features = ["aio", "tokio-comp"] }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
-tokio-tungstenite = { version = "0.18", features = ["connect", "native-tls"] }
+tokio-tungstenite = { version = "0.26.1", features = ["connect", "native-tls"] }
 url = "2.3"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -21,4 +20,4 @@ sha2 = "0.10.8"
 base64 = "0.22.1"
 crossbeam = "0.8.4"
 simplelog = "0.12.2"
-env_logger = "0.9"
+env_logger = "0.11.6"

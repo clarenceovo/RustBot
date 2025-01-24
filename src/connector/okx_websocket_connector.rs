@@ -167,18 +167,7 @@ impl OkxMarketDataWebSocketConnector {
         }
 
         loop {
-            if {
-                let mut last_ping = self.last_ping.lock().await;
-                if *last_ping + 25000 < Utils::get_current_timestamp_ms() {
-                    *last_ping = Utils::get_current_timestamp_ms();
-                    true
-                } else {
-                    false
-                }
-            } {
-                let ping_message = "ping";
-                write.send(Message::Text(ping_message.to_string())).await?;
-            }
+
             match timeout(self.config.timeout_duration, read.next()).await {
                 Ok(Some(message)) => {
 

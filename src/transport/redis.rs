@@ -85,4 +85,8 @@ impl RedisClient {
         let mut conn = self.connection.lock().await;
         conn.lrange(key, 0, -1).await
     }
+    pub async fn lpush(&self, key: &str, value: &str) -> RedisResult<()> {
+        let mut conn = self.connection.lock().await;
+        conn.lpush(key, value).await
+    }
 }
