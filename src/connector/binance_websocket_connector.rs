@@ -180,7 +180,7 @@ impl BinanceFuturesWebSocketConnector {
             "id": 1
         });
         write.send(Message::Text(subscribe_message.to_string())).await?;
-        //write.send(Message::Text(liquidation_message.to_string())).await?;
+        write.send(Message::Text(liquidation_message.to_string())).await?;
         loop {
             match timeout(self.config.timeout_duration, read.next()).await {
                 Ok(Some(message)) => {
