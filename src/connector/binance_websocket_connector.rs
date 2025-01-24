@@ -167,14 +167,13 @@ impl BinanceFuturesWebSocketConnector {
             "id": 1
         });
 
-        /* 
+
         let subscribe_message = json!({
             "method": "SUBSCRIBE",
             "params": self.topic_list.iter().map(|symbol| format!("{}@bookTicker", symbol.to_lowercase())).collect::<Vec<String>>(),
             "id": 1
         });
 
-        */
         let subscribe_message = json!({
             "method": "SUBSCRIBE",
             "params": self.topic_list.iter().map(|symbol| format!("{}@bookTicker", symbol.to_lowercase())).collect::<Vec<String>>(),
@@ -224,14 +223,13 @@ impl BinanceFuturesWebSocketConnector {
 
     async fn process_text_message(&mut self, text: &str) -> Result<(), WebSocketError> {
         let json_data: Value = serde_json::from_str(text)?;
-
+        //info!("Received message: {}", json_data.to_string());
         if json_data["e"].as_str() == Some("bookTicker") {
             let mut last_ts = self.timestamp_record.get(json_data["s"].as_str().unwrap_or("Unknown")).unwrap_or(&0);
             let server_ts = Utils::get_current_timestamp_ms() as i64;
             if (last_ts - server_ts).abs() > 500 || *last_ts == 0 {
                 let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
                 let latency = server_ts - event_ts;
-                //debug!("Latency: {} ms", latency);
 
                 let bid_order = Self::parse_order(&json_data, "b", "B")?;
                 let ask_order = Self::parse_order(&json_data, "a", "A")?;
@@ -253,6 +251,12 @@ impl BinanceFuturesWebSocketConnector {
                 obj.insert("timestamp", &timestamp_str);
 
 
+                match self.redis_conn.hset_multiple(&topic, obj).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Failed to set data in Redis: {}", e);
+                    }
+                }
 
                 /* 
                 let mut order_book = self.order_book.lock().await;
@@ -303,7 +307,7 @@ impl BinanceFuturesWebSocketConnector {
                 }
             }
         } else if json_data["e"].as_str() == Some("aggTrade") {
-            /* 
+            /*
             let mut obj = HashMap::<&str,&str>::new();
             let event_ts = json_data["E"].as_i64().ok_or(WebSocketError::ParseError("Missing event time".to_string()))?;
             let detail = json_data.as_object().unwrap();
@@ -319,7 +323,7 @@ impl BinanceFuturesWebSocketConnector {
             let topic = format!("Binance_Trade:{}",  detail["s"].as_str().unwrap_or("Unknown"));
             */
             //print!("Trade: {}\n",json_data);
-            /* 
+            /*
             match self.redis_conn.hset_multiple(&topic,obj).await {
                 Ok(_) => {},
                 Err(e) => {

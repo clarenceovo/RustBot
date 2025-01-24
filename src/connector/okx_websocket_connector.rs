@@ -211,7 +211,7 @@ impl OkxMarketDataWebSocketConnector {
 
     async fn process_text_message(&self, text: &str) -> Result<(), WebSocketError> {
         //ignore pong
-        println!("Received message: {}", text);
+        //println!("Received message: {}", text);
         if text == "pong" {
             info!("Received pong");
             return Ok(());
